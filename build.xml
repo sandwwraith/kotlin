@@ -520,7 +520,7 @@
                 <zipfileset src="${bootstrap.reflect}">
                     <patternset refid="lib.metainf.patternset"/>
                 </zipfileset>
-                <zipfileset src="${bootstrap.script.runtime}">
+                <zipfileset src="C:\Dev\kt\kotlin\libraries\tools\script-runtime\build\libs\kotlin-script-runtime-1.1-SNAPSHOT.jar">
                     <patternset refid="lib.metainf.patternset"/>
                 </zipfileset>
 
