@@ -81,6 +81,8 @@
                                     <excludes>
                                         <exclude>com/sun/jna/**</exclude>
                                         <exclude>net/rubygrapefruit/**</exclude>
+                                        <exclude>org/fusesource/jansi/**</exclude>
+                                        <exclude>META-INF/native/**/*jansi.*</exclude>
                                     </excludes>
                                 </filter>
                             </filters>
