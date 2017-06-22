@@ -19,7 +19,6 @@ package org.jetbrains.kotlin.scripts
 import com.intellij.openapi.util.Disposer
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys
 import org.jetbrains.kotlin.cli.common.messages.*
-import org.jetbrains.kotlin.script.tryConstructClassFromStringArgs
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinToJVMBytecodeCompiler
@@ -29,7 +28,10 @@ import org.jetbrains.kotlin.config.addKotlinSourceRoot
 import org.jetbrains.kotlin.daemon.TestMessageCollector
 import org.jetbrains.kotlin.daemon.assertHasMessage
 import org.jetbrains.kotlin.daemon.toFile
-import org.jetbrains.kotlin.script.*
+import org.jetbrains.kotlin.script.InvalidScriptResolverAnnotation
+import org.jetbrains.kotlin.script.KotlinScriptDefinition
+import org.jetbrains.kotlin.script.KotlinScriptDefinitionFromAnnotatedTemplate
+import org.jetbrains.kotlin.script.tryConstructClassFromStringArgs
 import org.jetbrains.kotlin.test.ConfigurationKind
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.jetbrains.kotlin.test.TestJdkKind
@@ -43,12 +45,8 @@ import java.lang.Exception
 import java.lang.reflect.InvocationTargetException
 import java.net.URL
 import java.net.URLClassLoader
-import java.util.concurrent.Future
 import kotlin.reflect.KClass
-import kotlin.script.dependencies.KotlinScriptExternalDependencies
-import kotlin.script.dependencies.ScriptContents
-import kotlin.script.dependencies.ScriptDependenciesResolver
-import kotlin.script.dependencies.asFuture
+import kotlin.script.dependencies.*
 import kotlin.script.templates.AcceptedAnnotations
 import kotlin.script.templates.ScriptTemplateDefinition
 import kotlin.script.templates.standard.ScriptTemplateWithArgs
@@ -316,16 +314,14 @@ class ScriptTemplateTest {
 open class TestKotlinScriptDummyDependenciesResolver : ScriptDependenciesResolver {
 
     @AcceptedAnnotations(DependsOn::class, DependsOnTwo::class)
-    override fun resolve(script: ScriptContents,
-                         environment: Map<String, Any?>?,
-                         report: (ScriptDependenciesResolver.ReportSeverity, String, ScriptContents.Position?) -> Unit,
-                         previousDependencies: KotlinScriptExternalDependencies?
-    ): Future<KotlinScriptExternalDependencies?>
+    override fun resolve(scriptContents: ScriptContents,
+                         environment: Environment
+    ): ScriptDependencyResult
     {
-        return object : KotlinScriptExternalDependencies {
-            override val classpath: Iterable<File> = classpathFromClassloader()
-            override val imports: Iterable<String> = listOf("org.jetbrains.kotlin.scripts.DependsOn", "org.jetbrains.kotlin.scripts.DependsOnTwo")
-        }.asFuture()
+        return object : ScriptDependencies {
+            override val classpath: List<File> = classpathFromClassloader()
+            override val imports: List<String> = listOf("org.jetbrains.kotlin.scripts.DependsOn", "org.jetbrains.kotlin.scripts.DependsOnTwo")
+        }.asSuccess()
     }
 
     protected fun classpathFromClassloader(): List<File> =
@@ -340,13 +336,11 @@ open class TestKotlinScriptDependenciesResolver : TestKotlinScriptDummyDependenc
     private val kotlinPaths by lazy { PathUtil.getKotlinPathsForCompiler() }
 
     @AcceptedAnnotations(DependsOn::class, DependsOnTwo::class)
-    override fun resolve(script: ScriptContents,
-                         environment: Map<String, Any?>?,
-                         report: (ScriptDependenciesResolver.ReportSeverity, String, ScriptContents.Position?) -> Unit,
-                         previousDependencies: KotlinScriptExternalDependencies?
-    ): Future<KotlinScriptExternalDependencies?>
+    override fun resolve(scriptContents: ScriptContents,
+                         environment: Environment
+    ): ScriptDependencyResult
     {
-        val cp = script.annotations.flatMap {
+        val cp = scriptContents.annotations.flatMap {
             when (it) {
                 is DependsOn -> if (it.path == "@{runtime}") listOf(kotlinPaths.runtimePath, kotlinPaths.scriptRuntimePath) else listOf(File(it.path))
                 is DependsOnTwo -> listOf(it.path1, it.path2).flatMap {
@@ -360,25 +354,28 @@ open class TestKotlinScriptDependenciesResolver : TestKotlinScriptDummyDependenc
                 else -> throw Exception("Unknown annotation ${it::class.java}")
             }
         }
-        return object : KotlinScriptExternalDependencies {
-            override val classpath: Iterable<File> = classpathFromClassloader() + cp
-            override val imports: Iterable<String> = listOf("org.jetbrains.kotlin.scripts.DependsOn", "org.jetbrains.kotlin.scripts.DependsOnTwo")
-        }.asFuture()
+        return object : ScriptDependencies {
+            override val classpath: List<File> = classpathFromClassloader() + cp
+            override val imports: List<String> = listOf("org.jetbrains.kotlin.scripts.DependsOn", "org.jetbrains.kotlin.scripts.DependsOnTwo")
+        }.asSuccess()
     }
 }
 
 class ErrorReportingResolver : TestKotlinScriptDependenciesResolver() {
     override fun resolve(
-            script: ScriptContents,
-            environment: Map<String, Any?>?,
-            report: (ScriptDependenciesResolver.ReportSeverity, String, ScriptContents.Position?) -> Unit,
-            previousDependencies: KotlinScriptExternalDependencies?
-    ): Future<KotlinScriptExternalDependencies?> {
-        report(ScriptDependenciesResolver.ReportSeverity.ERROR, "error", null)
-        report(ScriptDependenciesResolver.ReportSeverity.WARNING, "warning", ScriptContents.Position(1, 0))
-        report(ScriptDependenciesResolver.ReportSeverity.INFO, "info", ScriptContents.Position(2, 0))
-        report(ScriptDependenciesResolver.ReportSeverity.DEBUG, "debug", ScriptContents.Position(3, 0))
-        return super.resolve(script, environment, report, previousDependencies)
+            scriptContents: ScriptContents,
+            environment: Environment
+    ): ScriptDependencyResult {
+        return ScriptDependencyResult.Success(
+                super.resolve(scriptContents, environment).dependencies!!,
+                listOf(
+                        ScriptReport("error", ScriptReport.Severity.ERROR, null),
+                        ScriptReport("warning", ScriptReport.Severity.WARNING, ScriptReport.Position(1, 0)),
+                        ScriptReport("info", ScriptReport.Severity.INFO, ScriptReport.Position(2, 0)),
+                        ScriptReport("debug", ScriptReport.Severity.DEBUG, ScriptReport.Position(3, 0))
+
+                )
+        )
     }
 }
 
@@ -443,3 +440,6 @@ private class NullOutputStream : OutputStream() {
     override fun write(b: ByteArray) { }
     override fun write(b: ByteArray, off: Int, len: Int) { }
 }
+
+// TODO_R:
+fun ScriptDependencies.asSuccess(): ScriptDependencyResult.Success = ScriptDependencyResult.Success(this)

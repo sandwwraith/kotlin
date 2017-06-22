@@ -25,8 +25,8 @@ import org.jetbrains.kotlin.psi.KtAnnotationEntry
 import org.jetbrains.kotlin.psi.KtFile
 import java.io.File
 import kotlin.reflect.KClass
-import kotlin.script.dependencies.KotlinScriptExternalDependencies
 import kotlin.script.dependencies.ScriptContents
+import kotlin.script.dependencies.ScriptDependencies
 
 abstract class KotlinScriptExternalImportsProviderBase(private val project: Project) : KotlinScriptExternalImportsProvider {
     fun getScriptContents(scriptDefinition: KotlinScriptDefinition, file: VirtualFile)
@@ -59,19 +59,15 @@ abstract class KotlinScriptExternalImportsProviderBase(private val project: Proj
 
     fun resolveDependencies(
             scriptDef: KotlinScriptDefinition,
-            file: VirtualFile,
-            oldDependencies: KotlinScriptExternalDependencies? = null
-    ): KotlinScriptExternalDependencies? {
+            file: VirtualFile
+    ): ScriptDependencies? {
         val scriptContents = getScriptContents(scriptDef, file)
-        val errors = ArrayList<ScriptError>()
-        val dependencies = scriptDef.dependencyResolver.resolve(
+        val result = scriptDef.dependencyResolver.resolve(
                 scriptContents,
-                (scriptDef as? KotlinScriptDefinitionFromAnnotatedTemplate)?.environment,
-                { severity, message, position -> errors.add(ScriptError(severity, message, position)) },
-                oldDependencies
+                (scriptDef as? KotlinScriptDefinitionFromAnnotatedTemplate)?.environment.orEmpty()
         )
-        ServiceManager.getService(project, ScriptErrorManager::class.java)?.setErrors(file, errors)
-        return dependencies.get()
+        ServiceManager.getService(project, ScriptErrorManager::class.java)?.setErrors(file, result.reports)
+        return result.dependencies
     }
 }
 

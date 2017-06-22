@@ -17,18 +17,11 @@
 package org.jetbrains.kotlin.script
 
 import com.intellij.openapi.vfs.VirtualFile
-import kotlin.script.dependencies.ScriptContents
-
-// TODO_R: move into script-jar
-data class ScriptError(
-        val severity: kotlin.script.dependencies.ScriptDependenciesResolver.ReportSeverity,
-        val message: String,
-        val position: ScriptContents.Position?
-)
+import kotlin.script.dependencies.ScriptReport
 
 interface ScriptErrorManager {
-    fun setErrors(scriptFile: VirtualFile, errors: List<ScriptError>)
+    fun setErrors(scriptFile: VirtualFile, errors: List<ScriptReport>)
     fun clearErrors(scriptFile: VirtualFile) = setErrors(scriptFile, listOf())
 
-    val lastErrors : List<ScriptError>
+    val lastErrors : List<ScriptReport>
 }

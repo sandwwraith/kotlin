@@ -17,8 +17,6 @@
 package org.jetbrains.kotlin.script
 
 import com.intellij.openapi.diagnostic.Logger
-import com.intellij.openapi.project.Project
-import com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.name.NameUtils
 import org.jetbrains.kotlin.psi.KtScript
@@ -28,9 +26,6 @@ import kotlin.reflect.KFunction
 import kotlin.reflect.KParameter
 import kotlin.reflect.full.memberFunctions
 import kotlin.reflect.full.primaryConstructor
-import kotlin.script.dependencies.BasicScriptDependenciesResolver
-import kotlin.script.dependencies.KotlinScriptExternalDependencies
-import kotlin.script.dependencies.ScriptContents
 import kotlin.script.dependencies.ScriptDependenciesResolver
 import kotlin.script.templates.AcceptedAnnotations
 
@@ -79,7 +74,7 @@ open class KotlinScriptDefinitionFromAnnotatedTemplate(
                     null
                 }
             else -> null
-        } ?: BasicScriptDependenciesResolver()
+        } ?: ScriptDependenciesResolver.Empty
     }
 
     val samWithReceiverAnnotations: List<String>? by lazy {
@@ -116,8 +111,6 @@ open class KotlinScriptDefinitionFromAnnotatedTemplate(
     // TODO: implement other strategy - e.g. try to extract something from match with ScriptFilePattern
     override fun getScriptName(script: KtScript): Name = NameUtils.getScriptNameForFile(script.containingKtFile.name)
 
-    override fun getDependenciesFor(file: VirtualFile, project: Project, previousDependencies: KotlinScriptExternalDependencies?) = error("Should not be called")
-
     override fun toString(): String = "KotlinScriptDefinitionFromAnnotatedTemplate - ${template.simpleName}"
 
     override val annotationsForSamWithReceivers: List<String>
@@ -141,20 +134,3 @@ open class KotlinScriptDefinitionFromAnnotatedTemplate(
         internal val log = Logger.getInstance(KotlinScriptDefinitionFromAnnotatedTemplate::class.java)
     }
 }
-
-internal fun logScriptDefMessage(reportSeverity: ScriptDependenciesResolver.ReportSeverity, s: String, position: ScriptContents.Position?): Unit {
-    val msg = (position?.run { "[at $line:$col]" } ?: "") + s
-    when (reportSeverity) {
-        ScriptDependenciesResolver.ReportSeverity.ERROR -> KotlinScriptDefinitionFromAnnotatedTemplate.log.error(msg)
-        ScriptDependenciesResolver.ReportSeverity.WARNING -> KotlinScriptDefinitionFromAnnotatedTemplate.log.warn(msg)
-        ScriptDependenciesResolver.ReportSeverity.INFO -> KotlinScriptDefinitionFromAnnotatedTemplate.log.info(msg)
-        ScriptDependenciesResolver.ReportSeverity.DEBUG -> KotlinScriptDefinitionFromAnnotatedTemplate.log.debug(msg)
-    }
-}
-
-internal fun sameSignature(left: KFunction<*>, right: KFunction<*>): Boolean =
-        left.parameters.size == right.parameters.size &&
-        left.parameters.zip(right.parameters).all {
-            it.first.kind == KParameter.Kind.INSTANCE ||
-            it.first.type == it.second.type
-        }

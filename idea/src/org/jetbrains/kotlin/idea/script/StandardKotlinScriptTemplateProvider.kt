@@ -24,11 +24,7 @@ import org.jetbrains.kotlin.idea.core.script.dependencies.KotlinScriptResolveSco
 import org.jetbrains.kotlin.script.ScriptTemplatesProvider
 import org.jetbrains.kotlin.utils.PathUtil
 import java.io.File
-import java.util.concurrent.Future
-import kotlin.script.dependencies.KotlinScriptExternalDependencies
-import kotlin.script.dependencies.PseudoFuture
-import kotlin.script.dependencies.ScriptContents
-import kotlin.script.dependencies.ScriptDependenciesResolver
+import kotlin.script.dependencies.*
 import kotlin.script.templates.standard.ScriptTemplateWithArgs
 
 class StandardKotlinScriptTemplateProvider(val project: Project) : ScriptTemplatesProvider {
@@ -57,18 +53,17 @@ class StandardKotlinScriptTemplateProvider(val project: Project) : ScriptTemplat
 
 class BundledKotlinScriptDependenciesResolver : ScriptDependenciesResolver {
     override fun resolve(
-            script: ScriptContents,
-            environment: Map<String, Any?>?,
-            report: (ScriptDependenciesResolver.ReportSeverity, String, ScriptContents.Position?) -> Unit,
-            previousDependencies: KotlinScriptExternalDependencies?): Future<KotlinScriptExternalDependencies?> {
-        val javaHome = environment?.get("sdk") as String?
-        val dependencies = KotlinBundledScriptDependencies(javaHome)
-        return PseudoFuture(dependencies)
+            scriptContents: ScriptContents,
+            environment: Environment
+    ): ScriptDependencyResult {
+        val javaHome = environment.get("sdk") as String?
+        val dependencies = KotlinBundledScriptDependencies(javaHome?.let(::File))
+        return dependencies.asSuccess()
     }
 }
 
-class KotlinBundledScriptDependencies(override val javaHome: String?) : KotlinScriptExternalDependencies {
-    override val classpath: Iterable<File> get() {
+class KotlinBundledScriptDependencies(override val javaHome: File?) : ScriptDependencies {
+    override val classpath: List<File> get() {
         return with(PathUtil.getKotlinPathsForIdeaPlugin()) {
             listOf(
                     reflectPath,

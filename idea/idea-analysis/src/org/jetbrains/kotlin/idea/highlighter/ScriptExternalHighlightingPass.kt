@@ -36,8 +36,7 @@ import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiFile
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.script.ScriptErrorManager
-import kotlin.script.dependencies.ScriptContents
-import kotlin.script.dependencies.ScriptDependenciesResolver
+import kotlin.script.dependencies.ScriptReport
 
 class ScriptExternalHighlightingPass(
         private val file: KtFile,
@@ -49,7 +48,7 @@ class ScriptExternalHighlightingPass(
         val document = document ?: return
 
         val annotations = getErrors().mapNotNull {
-            (severity, message, position) ->
+            (message, severity, position) ->
             val (startOffset, endOffset) = computeOffsets(document, position) ?: return@mapNotNull null
             Annotation(
                     startOffset,
@@ -68,7 +67,7 @@ class ScriptExternalHighlightingPass(
     private fun getErrors() = myProject.service<ScriptErrorManager>().lastErrors
 
     // TODO_R: use API to get endoffset of the error
-    private fun computeOffsets(document: Document, position: ScriptContents.Position?): Pair<Int, Int>? {
+    private fun computeOffsets(document: Document, position: ScriptReport.Position?): Pair<Int, Int>? {
         val (line, col) = position ?: return null
         val offset = document.getLineStartOffset(line) + col
         if (offset < 0) return null
@@ -79,11 +78,11 @@ class ScriptExternalHighlightingPass(
         return offset to endOffset
     }
 
-    private fun ScriptDependenciesResolver.ReportSeverity.convertSeverity(): HighlightSeverity? {
+    private fun ScriptReport.Severity.convertSeverity(): HighlightSeverity? {
         return when (this) {
-            ScriptDependenciesResolver.ReportSeverity.ERROR -> ERROR
-            ScriptDependenciesResolver.ReportSeverity.WARNING -> WARNING
-            ScriptDependenciesResolver.ReportSeverity.INFO -> INFORMATION
+            ScriptReport.Severity.ERROR -> ERROR
+            ScriptReport.Severity.WARNING -> WARNING
+            ScriptReport.Severity.INFO -> INFORMATION
             else -> null
         }
     }

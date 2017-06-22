@@ -17,14 +17,14 @@
 package org.jetbrains.kotlin.idea.core.script
 
 import com.intellij.openapi.vfs.VirtualFile
-import org.jetbrains.kotlin.script.ScriptError
 import org.jetbrains.kotlin.script.ScriptErrorManager
+import kotlin.script.dependencies.ScriptReport
 
 class IdeScriptErrorManager : ScriptErrorManager{
     // TODO_R:
-    override var lastErrors: List<ScriptError> = emptyList()
+    override var lastErrors: List<ScriptReport> = emptyList()
 
-    override fun setErrors(scriptFile: VirtualFile, errors: List<ScriptError>) {
+    override fun setErrors(scriptFile: VirtualFile, errors: List<ScriptReport>) {
         lastErrors = errors
     }
 }
