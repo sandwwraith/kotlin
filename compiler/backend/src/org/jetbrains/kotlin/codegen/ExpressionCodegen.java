@@ -2873,24 +2873,6 @@ public class ExpressionCodegen extends KtVisitor<StackValue, StackValue> impleme
         assert deparenthesized != null : "For with empty range expression";
         RangeValue rangeValue = RangeValuesKt.createRangeValueForExpression(this, deparenthesized);
         return rangeValue.createInExpressionGenerator(this, operationReference).generate(leftValue);
-
-        //boolean isInverted = operationReference.getReferencedNameElementType() == KtTokens.NOT_IN;
-        //return StackValue.operation(Type.BOOLEAN_TYPE, v -> {
-        //    if (RangeCodegenUtilKt.isPrimitiveRangeSpecializationOfType(leftValue.type, deparenthesized, bindingContext) ||
-        //        RangeCodegenUtilKt.isPrimitiveRangeToExtension(operationReference, bindingContext)) {
-        //        generateInPrimitiveRange(leftValue, (KtBinaryExpression) deparenthesized, isInverted);
-        //    }
-        //    else {
-        //        ResolvedCall<? extends CallableDescriptor> resolvedCall = CallUtilKt
-        //                .getResolvedCallWithAssert(operationReference, bindingContext);
-        //        StackValue result = invokeFunction(resolvedCall.getCall(), resolvedCall, StackValue.none());
-        //        result.put(result.type, v);
-        //        if (isInverted) {
-        //            genInvertBoolean(v);
-        //        }
-        //    }
-        //    return null;
-        //});
     }
 
     /*
