@@ -23,7 +23,7 @@ import kotlin.script.dependencies.DependenciesResolver.ResolveResult
 
 typealias Environment = Map<String, Any?>
 
-interface DependenciesResolver {
+interface DependenciesResolver : @Suppress("DEPRECATION") ScriptDependenciesResolver {
     fun resolve(scriptContents: ScriptContents, environment: Environment): ResolveResult
 
     object NoDependencies : StaticDependenciesResolver {
@@ -57,6 +57,9 @@ interface ScriptContents {
     val file: File?
     val annotations: Iterable<Annotation>
     val text: CharSequence?
+
+    @Deprecated("Use DependenciesResolver interface")
+    data class Position(val line: Int, val col: Int)
 }
 
 data class ScriptReport(val message: String, val severity: Severity = ScriptReport.Severity.ERROR, val position: Position? = null) {
