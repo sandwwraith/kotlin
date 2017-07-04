@@ -26,8 +26,6 @@ private val METADATA_PROPERTIES_COUNT = 2
 
 class InlineMetadata(val tag: JsStringLiteral, val function: FunctionWithWrapper) {
     companion object {
-        private val markerFunctions = setOf(Namer.DEFINE_INLINE_FUNCTION, Namer.DEFINE_INLINE_FUNCTION_BUILDER)
-
         @JvmStatic
         fun compose(function: JsFunction, descriptor: CallableDescriptor, context: TranslationContext): InlineMetadata {
             val tag = JsStringLiteral(Namer.getFunctionTag(descriptor, context.config))
@@ -45,37 +43,45 @@ class InlineMetadata(val tag: JsStringLiteral, val function: FunctionWithWrapper
 
         private fun decomposeCreateFunctionCall(call: JsInvocation): InlineMetadata? {
             val qualifier = call.qualifier
-            if (qualifier !is JsNameRef || qualifier.ident !in markerFunctions) return null
+            if (qualifier !is JsNameRef || qualifier.ident != Namer.DEFINE_INLINE_FUNCTION) return null
 
             val arguments = call.arguments
             if (arguments.size != METADATA_PROPERTIES_COUNT) return null
 
             val tag = arguments[0] as? JsStringLiteral ?: return null
-            val callExpression = arguments[1]
-            val function = if (qualifier.ident == Namer.DEFINE_INLINE_FUNCTION) {
-                FunctionWithWrapper(callExpression as? JsFunction ?: return null, null)
-            }
-            else {
-                tryExtractFunction(callExpression) ?: return null
-            }
+            val function = tryExtractFunction(arguments[1]) ?: return null
 
             return InlineMetadata(tag, function)
         }
 
         @JvmStatic
         fun tryExtractFunction(callExpression: JsExpression): FunctionWithWrapper? {
-            if (callExpression !is JsFunction) return null
-            val returnExpr = callExpression.body.statements.lastOrNull() as? JsReturn ?: return null
+            if (callExpression is JsFunction) return FunctionWithWrapper(callExpression, null)
+            if (callExpression !is JsInvocation) return null
+
+            val qualifier = callExpression.qualifier as? JsNameRef ?: return null
+            val qualifierQualifier = qualifier.qualifier as? JsNameRef ?: return null
+            if (qualifierQualifier.qualifier != null || qualifier.ident != Namer.WRAP_FUNCTION) return null
+            if (callExpression.arguments.size != 1) return null
+
+            val argument = callExpression.arguments[0] as? JsFunction ?: return null
+
+            val returnExpr = argument.body.statements.lastOrNull() as? JsReturn ?: return null
             val function = returnExpr.expression as? JsFunction ?: return null
 
-            return FunctionWithWrapper(function, callExpression.body)
+            return FunctionWithWrapper(function, argument.body)
+        }
+
+        @JvmStatic
+        fun wrapFunction(function: FunctionWithWrapper): JsExpression {
+            val wrapperBody = function.wrapperBody ?: JsBlock(JsReturn(function.function))
+            val wrapper = JsFunction(function.function.scope, wrapperBody, "")
+            return JsInvocation(Namer.wrapFunction(), wrapper)
         }
     }
 
     val functionWithMetadata: JsExpression
         get() {
-            val wrapperBody = function.wrapperBody ?: JsBlock()
-            val wrapper = JsFunction(function.function.scope, wrapperBody, "")
-            return JsInvocation(Namer.createInlineFunctionBuilder(), listOf(tag, wrapper))
+            return JsInvocation(Namer.createInlineFunction(), tag, wrapFunction(function))
         }
 }

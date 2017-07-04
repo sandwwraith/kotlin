@@ -201,3 +201,30 @@ fun definePackageAlias(name: String, varName: JsName, tag: String, parentRef: Js
 
     return JsAstUtils.newVar(varName, rhs).apply { exportedPackage = tag }
 }
+
+fun TranslationContext.addFunctionButNotExport(descriptor: FunctionDescriptor, expression: JsExpression): JsName {
+    val name = getInnerNameForDescriptor(descriptor)
+    when (expression) {
+        is JsFunction -> {
+            expression.name = name
+            addDeclarationStatement(expression.makeStmt())
+        }
+        else -> {
+            addDeclarationStatement(JsAstUtils.newVar(name, expression))
+        }
+    }
+    return name
+}
+
+fun TranslationContext.addFunctionButNotExport(name: JsName, expression: JsExpression): JsName {
+    when (expression) {
+        is JsFunction -> {
+            expression.name = name
+            addDeclarationStatement(expression.makeStmt())
+        }
+        else -> {
+            addDeclarationStatement(JsAstUtils.newVar(name, expression))
+        }
+    }
+    return name
+}

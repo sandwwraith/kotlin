@@ -21,6 +21,7 @@ import org.jetbrains.kotlin.descriptors.impl.ValueParameterDescriptorImpl
 import org.jetbrains.kotlin.js.backend.ast.*
 import org.jetbrains.kotlin.js.backend.ast.metadata.*
 import org.jetbrains.kotlin.js.descriptorUtils.isCoroutineLambda
+import org.jetbrains.kotlin.js.inline.util.FunctionWithWrapper
 import org.jetbrains.kotlin.js.inline.util.getInnerFunction
 import org.jetbrains.kotlin.js.inline.util.rewriters.NameReplacingVisitor
 import org.jetbrains.kotlin.js.translate.context.TranslationContext
@@ -33,6 +34,7 @@ import org.jetbrains.kotlin.js.translate.utils.FunctionBodyTranslator.setDefault
 import org.jetbrains.kotlin.js.translate.utils.FunctionBodyTranslator.translateFunctionBody
 import org.jetbrains.kotlin.js.translate.utils.JsAstUtils
 import org.jetbrains.kotlin.js.translate.utils.TranslationUtils.simpleReturnFunction
+import org.jetbrains.kotlin.js.translate.utils.addFunctionButNotExport
 import org.jetbrains.kotlin.js.translate.utils.fillCoroutineMetadata
 import org.jetbrains.kotlin.psi.KtDeclarationWithBody
 import org.jetbrains.kotlin.psi.KtParameter
@@ -62,19 +64,18 @@ class LiteralFunctionTranslator(context: TranslationContext) : AbstractTranslato
 
         val tracker = functionContext.usageTracker()!!
 
+        val name = invokingContext.getInnerNameForDescriptor(descriptor)
         if (tracker.hasCapturedExceptContaining()) {
             val lambdaCreator = simpleReturnFunction(invokingContext.scope(), lambda.source(declaration))
-            lambdaCreator.name = invokingContext.getInnerNameForDescriptor(descriptor)
             lambdaCreator.isLocal = true
             if (descriptor in tracker.capturedDescriptors && !descriptor.isCoroutineLambda) {
                 lambda.name = tracker.getNameForCapturedDescriptor(descriptor)
             }
-            lambdaCreator.name.staticRef = lambdaCreator
+            name.staticRef = lambdaCreator
             lambdaCreator.fillCoroutineMetadata(invokingContext, descriptor)
-            return lambdaCreator.withCapturedParameters(functionContext, invokingContext)
+            return lambdaCreator.withCapturedParameters(functionContext, name, invokingContext)
         }
 
-        lambda.name = invokingContext.getInnerNameForDescriptor(descriptor)
         if (descriptor in tracker.capturedDescriptors) {
             val capturedName = tracker.getNameForCapturedDescriptor(descriptor)!!
             val globalName = invokingContext.getInnerNameForDescriptor(descriptor)
@@ -84,10 +85,10 @@ class LiteralFunctionTranslator(context: TranslationContext) : AbstractTranslato
 
         lambda.isLocal = true
 
-        invokingContext.addDeclarationStatement(lambda.makeStmt())
+        invokingContext.addFunctionButNotExport(name, InlineMetadata.wrapFunction(FunctionWithWrapper(lambda, null)))
         lambda.fillCoroutineMetadata(invokingContext, descriptor)
-        lambda.name.staticRef = lambda
-        return JsAstUtils.pureFqn(lambda.name, null)
+        name.staticRef = lambda
+        return JsAstUtils.pureFqn(name, null)
     }
 
     fun JsFunction.fillCoroutineMetadata(context: TranslationContext, descriptor: FunctionDescriptor) {
@@ -108,10 +109,11 @@ class LiteralFunctionTranslator(context: TranslationContext) : AbstractTranslato
 
 fun JsFunction.withCapturedParameters(
         context: TranslationContext,
+        functionName: JsName,
         invokingContext: TranslationContext
 ): JsExpression {
-    context.addDeclarationStatement(makeStmt())
-    val ref = JsAstUtils.pureFqn(name, null)
+    context.addFunctionButNotExport(functionName, InlineMetadata.wrapFunction(FunctionWithWrapper(this, null)))
+    val ref = JsAstUtils.pureFqn(functionName, null)
     val invocation = JsInvocation(ref).apply { sideEffects = SideEffectKind.PURE }
 
     val invocationArguments = invocation.arguments

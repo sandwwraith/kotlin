@@ -227,9 +227,9 @@ fun collectAccessors(fragments: List<JsProgramFragment>): Map<String, FunctionWi
     return result
 }
 
-private fun extractFunction(expression: JsExpression) = when (expression) {
+fun extractFunction(expression: JsExpression) = when (expression) {
     is JsFunction -> FunctionWithWrapper(expression, null)
-    else -> InlineMetadata.decompose(expression)?.function
+    else -> InlineMetadata.decompose(expression)?.function ?: InlineMetadata.tryExtractFunction(expression)
 }
 
 fun <T : JsNode> collectInstances(klass: Class<T>, scope: JsNode): List<T> {

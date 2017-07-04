@@ -193,9 +193,9 @@ class FunctionReader(
             markerOffset--
         }
         markerOffset++
-        val builderNameLength = Namer.DEFINE_INLINE_FUNCTION_BUILDER.length
+        val builderNameLength = Namer.DEFINE_INLINE_FUNCTION.length
         val isBuilder = markerOffset > builderNameLength &&
-                        source.substring(markerOffset - builderNameLength, markerOffset) == Namer.DEFINE_INLINE_FUNCTION_BUILDER
+                        source.substring(markerOffset - builderNameLength, markerOffset) == Namer.DEFINE_INLINE_FUNCTION
 
         val position = info.offsetToSourceMapping[offset]
         val functionExpr = parseFunction(source, info.filePath, position, offset, ThrowExceptionOnErrorReporter, JsRootScope(JsProgram()))

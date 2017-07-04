@@ -19,13 +19,9 @@ package org.jetbrains.kotlin.js.translate.expression
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyAccessorDescriptor
-import org.jetbrains.kotlin.js.backend.ast.JsExpression
-import org.jetbrains.kotlin.js.backend.ast.JsFunction
-import org.jetbrains.kotlin.js.backend.ast.JsParameter
-import org.jetbrains.kotlin.js.backend.ast.JsScope
-import org.jetbrains.kotlin.js.backend.ast.metadata.descriptor
-import org.jetbrains.kotlin.js.backend.ast.metadata.functionDescriptor
-import org.jetbrains.kotlin.js.backend.ast.metadata.hasDefaultValue
+import org.jetbrains.kotlin.js.backend.ast.*
+import org.jetbrains.kotlin.js.backend.ast.metadata.*
+import org.jetbrains.kotlin.js.inline.util.FunctionWithWrapper
 import org.jetbrains.kotlin.js.translate.context.Namer
 import org.jetbrains.kotlin.js.translate.context.TranslationContext
 import org.jetbrains.kotlin.js.translate.reference.CallExpressionTranslator.shouldBeInlined
@@ -36,6 +32,7 @@ import org.jetbrains.kotlin.js.translate.utils.requiresStateMachineTransformatio
 import org.jetbrains.kotlin.psi.KtDeclarationWithBody
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.descriptorUtil.hasDefaultValue
+import org.jetbrains.kotlin.resolve.descriptorUtil.isEffectivelyPublicApi
 
 fun TranslationContext.translateAndAliasParameters(
         descriptor: FunctionDescriptor,
@@ -100,12 +97,16 @@ fun TranslationContext.translateFunction(declaration: KtDeclarationWithBody, fun
 }
 
 fun TranslationContext.wrapWithInlineMetadata(function: JsFunction, descriptor: FunctionDescriptor): JsExpression {
-    return if (shouldBeInlined(descriptor, this)) {
+    return if (shouldBeInlined(descriptor, this) && descriptor.isEffectivelyPublicApi) {
         val metadata = InlineMetadata.compose(function, descriptor, this)
         metadata.functionWithMetadata
     }
     else {
-        function
+        val statements = inlineFunctionContext?.let {
+            it.importBlock.statements + it.declarationsBlock.statements
+        }
+        val block = if (statements != null && statements.isNotEmpty()) JsBlock(statements + JsReturn(function)) else null
+        InlineMetadata.wrapFunction(FunctionWithWrapper(function, block))
     }
 }
 

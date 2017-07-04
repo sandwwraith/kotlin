@@ -410,6 +410,7 @@ public class TranslationContext {
                 }
                 MetadataProperties.setDescriptor(result, descriptor);
                 MetadataProperties.setStaticRef(result, imported);
+                MetadataProperties.setImported(result, true);
                 inlineFunctionContext.getImportBlock().getStatements().add(JsAstUtils.newVar(result, imported));
                 return result;
             });
