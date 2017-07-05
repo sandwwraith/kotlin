@@ -36,7 +36,7 @@ annotation class Serializer(
 annotation class SerialName(val value: String)
 
 @Target(AnnotationTarget.PROPERTY)
-annotation class SerialOptional() // todo: not supported yet
+annotation class Optional()
 
 @Target(AnnotationTarget.PROPERTY)
 annotation class Transient() // todo: not supported yet
@@ -67,7 +67,9 @@ interface KSerializer<T>: KSerialSaver<T>, KSerialLoader<T> {
 @Suppress("UNCHECKED_CAST")
 fun <T : Any> KClass<T>.serializer(): KSerializer<T> = companionObjectInstance as KSerializer<T>
 
-class SerializationException(s: String) : RuntimeException(s)
+open class SerializationException(s: String) : RuntimeException(s)
+
+class MissingFieldException(fieldName: String) : SerializationException("Field $fieldName is required, but it was missing")
 
 // ========================================================================================================================
 
@@ -545,14 +547,14 @@ open class ElementValueTransformer {
     open fun isRecursiveTransform(): Boolean = true
 
     // ---------------
-    
+
     private inner class Output : KOutput() {
         internal val list = arrayListOf<Any?>()
 
         override fun writeNullableValue(value: Any?) {
-            list.add(value);
+            list.add(value)
         }
-        
+
         override fun writeElement(desc: KSerialClassDesc, index: Int) = true
         override fun writeNotNullMark() {}
         override fun writeNullValue() { writeNullableValue(null) }

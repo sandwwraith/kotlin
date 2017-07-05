@@ -87,6 +87,13 @@ val Annotations.serialNameValue: String?
         return value
     }
 
+// ---- kotlin.serialization.Optional
+
+internal val serialOptionalFqName = FqName("kotlin.serialization.Optional")
+
+val Annotations.serialOptional: Boolean
+    get() = hasAnnotation(serialOptionalFqName)
+
 // ----------------------------------------
 
 val KotlinType?.toClassDescriptor: ClassDescriptor?

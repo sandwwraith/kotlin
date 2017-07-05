@@ -53,6 +53,9 @@ class SerializerCodegenImpl(
     private val kSerializerType = Type.getObjectType("kotlin/serialization/KSerializer")
     private val kSerializerArrayType = Type.getObjectType("[Lkotlin/serialization/KSerializer;")
 
+    private val serializationExceptionName = "kotlin/serialization/SerializationException"
+    private val serializationExceptionMissingFieldName = "kotlin/serialization/MissingFieldException"
+
     private val OPT_MASK_TYPE = Type.INT_TYPE
     private val OPT_MASK_BITS = 32
     private val OPT_MASK_FILLED = -1
@@ -275,32 +278,22 @@ class SerializerCodegenImpl(
             //validate all required (constructor) fields
             val nonThrowLabel = Label()
             val throwLabel = Label()
-            // if (bitMask == 0x1..1)
-            val cnt = properties.serializableConstructorProperties.size
-            for (i in 0 until cnt / OPT_MASK_BITS) {
-                load(bitMaskBase + i * OPT_MASK_TYPE.size, OPT_MASK_TYPE)
-                iconst(OPT_MASK_FILLED)
-                ificmpne(throwLabel)
-            }
-            // if (bitMask & 0x001..1 == 0x001..1) where all 1s at required bits
-            val left = cnt % OPT_MASK_BITS
-            if (left != 0) {
-                val map = (1 shl left) - 1
-                load(bitMaskOff(cnt), OPT_MASK_TYPE)
-                iconst(map)
-                and(OPT_MASK_TYPE)
-                iconst(map)
-                ificmpne(throwLabel)
+            for ((i, property) in properties.serializableConstructorProperties.withIndex()) {
+                if (property.optional) {
+                    // todo: Normal reporting of error
+                    if (!property.isConstructorParameterWithDefault)
+                        throw CompilationException("Property ${property.name} was declared as optional but has no default value", null, null)
+                }
+                else {
+                    genValidateProperty(i, ::bitMaskOff)
+                    // todo: print name of each variable?
+                    ificmpeq(throwLabel)
+                }
             }
             goTo(nonThrowLabel)
             // throwing an exception
-            //todo: more verbose exception with correct type, move to separate method
             visitLabel(throwLabel)
-            anew(Type.getObjectType("java/lang/RuntimeException"))
-            dup()
-            invokespecial("java/lang/RuntimeException", "<init>", "()V", false)
-            checkcast(Type.getObjectType("java/lang/Throwable"))
-            athrow()
+            genExceptionThrow(serializationExceptionName, "Not all required constructor fields were specified")
             // create object with constructor
             visitLabel(nonThrowLabel)
             anew(serializableAsmType)
@@ -313,7 +306,18 @@ class SerializerCodegenImpl(
                 load(propVar, propertyType)
                 propVar += propertyType.size
             }
-            constructorDesc.append(")V")
+            if (!properties.primaryConstructorWithDefaults) {
+                constructorDesc.append(")V")
+            }
+            else {
+                val cnt = properties.serializableConstructorProperties.size.coerceAtMost(32) //only 32 default values are supported
+                val mask = if (cnt == 32) -1 else ((1 shl cnt) - 1)
+                load(bitMaskBase, OPT_MASK_TYPE)
+                iconst(mask)
+                xor(Type.INT_TYPE)
+                aconst(null)
+                constructorDesc.append("ILkotlin/jvm/internal/DefaultConstructorMarker;)V")
+            }
             invokespecial(serializableAsmType.internalName, "<init>", constructorDesc.toString(), false)
             if (!properties.serializableStandaloneProperties.isEmpty()) {
                 // result := ... <created object>
@@ -329,6 +333,23 @@ class SerializerCodegenImpl(
         }
     }
 
+    private fun InstructionAdapter.genExceptionThrow(exceptionClass: String, message: String) {
+        anew(Type.getObjectType(exceptionClass))
+        dup()
+        aconst(message)
+        invokespecial(exceptionClass, "<init>", "(Ljava/lang/String;)V", false)
+        checkcast(Type.getObjectType("java/lang/Throwable"))
+        athrow()
+    }
+
+    private fun InstructionAdapter.genValidateProperty(i: Int, bitMaskPos: (Int) -> Int) {
+        val addr = bitMaskPos(i)
+        load(addr, OPT_MASK_TYPE)
+        iconst(1 shl (i % OPT_MASK_BITS))
+        and(OPT_MASK_TYPE)
+        iconst(0)
+    }
+
     private fun InstructionAdapter.genSetSerializableStandaloneProperties(
             expressionCodegen: ExpressionCodegen, propVarStart: Int, resultVar: Int, bitMaskPos: (Int) -> Int) {
         var propVar = propVarStart
@@ -337,13 +358,21 @@ class SerializerCodegenImpl(
             val i = index + offset
             //check if property has been seen and should be set
             val nextLabel = Label()
-            // if (bitMask & 1 << pos != 0)
-            val addr = bitMaskPos(i)
-            load(addr, OPT_MASK_TYPE)
-            iconst(1 shl (i % OPT_MASK_BITS))
-            and(OPT_MASK_TYPE)
-            iconst(0)
-            ificmpeq(nextLabel)
+            // seen = bitMask & 1 << pos != 0
+            genValidateProperty(i, bitMaskPos)
+            if (property.optional) {
+                // if (seen)
+                //    set
+                ificmpeq(nextLabel)
+            }
+            else {
+                // if (!seen)
+                //    throw
+                // set
+                ificmpne(nextLabel)
+                genExceptionThrow(serializationExceptionMissingFieldName, property.name)
+                visitLabel(nextLabel)
+            }
 
             // generate setter call
             val propertyType = codegen.typeMapper.mapType(property.type)
@@ -351,7 +380,8 @@ class SerializerCodegenImpl(
                                                            StackValue.local(resultVar, serializableAsmType)).
                     store(StackValue.local(propVar, propertyType), this)
             propVar += propertyType.size
-            visitLabel(nextLabel)
+            if (property.optional)
+                visitLabel(nextLabel)
         }
     }
 
@@ -454,7 +484,7 @@ class SerializerCodegenImpl(
                             // reference elements
                             serializer = property.module.findClassAcrossModuleDependencies(referenceArraySerializerId)
                         }
-                        // primitive elements are not supported yet
+                    // primitive elements are not supported yet
                     }
                 }
                 return SerialTypeInfo(property, Type.getType("Ljava/lang/Object;"),

@@ -20,16 +20,19 @@ import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
 import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor
 import org.jetbrains.kotlin.resolve.BindingContext
+import org.jetbrains.kotlin.resolve.descriptorUtil.hasDefaultValue
+import org.jetbrains.kotlin.resolve.descriptorUtil.hasOwnParametersWithDefaultValue
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 
 class SerializableProperties(serializableClass: ClassDescriptor, bindingContext: BindingContext) {
     private val primaryConstructorParameters: List<ValueParameterDescriptor> =
             serializableClass.unsubstitutedPrimaryConstructor?.valueParameters ?: emptyList()
 
-    private val primaryConstructorProperties: Set<PropertyDescriptor> =
+    private val primaryConstructorProperties: Map<PropertyDescriptor, Boolean> =
             primaryConstructorParameters.asSequence()
-                .mapNotNull { parameter -> bindingContext[BindingContext.VALUE_PARAMETER_AS_PROPERTY, parameter] }
-                .toSet()
+                    .map { parameter -> bindingContext[BindingContext.VALUE_PARAMETER_AS_PROPERTY, parameter] to parameter.hasDefaultValue() }
+                    .mapNotNull { (a, b) -> if (a == null) null else a to b }
+                    .toMap()
 
     val isExternallySerializable: Boolean =
             primaryConstructorParameters.size == primaryConstructorProperties.size
@@ -39,7 +42,7 @@ class SerializableProperties(serializableClass: ClassDescriptor, bindingContext:
                 .asSequence()
                 .filterIsInstance<PropertyDescriptor>()
                 .filter { it.isVar || primaryConstructorProperties.contains(it) }
-                .map(::SerializableProperty)
+                    .map { prop -> SerializableProperty(prop, primaryConstructorProperties[prop] ?: false) }
                 .toList()
 
     val serializableConstructorProperties: List<SerializableProperty> =
@@ -54,4 +57,6 @@ class SerializableProperties(serializableClass: ClassDescriptor, bindingContext:
     val indices = serializableProperties.indices
     operator fun get(index: Int) = serializableProperties[index]
     operator fun iterator() = serializableProperties.iterator()
+
+    val primaryConstructorWithDefaults = serializableClass.unsubstitutedPrimaryConstructor?.hasOwnParametersWithDefaultValue() ?: false
 }
