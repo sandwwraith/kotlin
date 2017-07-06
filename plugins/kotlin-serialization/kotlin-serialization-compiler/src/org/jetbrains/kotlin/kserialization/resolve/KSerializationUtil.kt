@@ -94,6 +94,13 @@ internal val serialOptionalFqName = FqName("kotlin.serialization.Optional")
 val Annotations.serialOptional: Boolean
     get() = hasAnnotation(serialOptionalFqName)
 
+// ---- kotlin.serialization.Transient
+
+internal val serialTransientFqName = FqName("kotlin.serialization.Transient")
+
+val Annotations.serialTransient: Boolean
+    get() = hasAnnotation(serialTransientFqName)
+
 // ----------------------------------------
 
 val KotlinType?.toClassDescriptor: ClassDescriptor?

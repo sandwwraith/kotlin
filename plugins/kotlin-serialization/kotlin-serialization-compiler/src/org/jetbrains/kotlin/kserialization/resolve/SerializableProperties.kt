@@ -41,7 +41,7 @@ class SerializableProperties(serializableClass: ClassDescriptor, bindingContext:
             serializableClass.unsubstitutedMemberScope.getContributedDescriptors(DescriptorKindFilter.VARIABLES)
                 .asSequence()
                 .filterIsInstance<PropertyDescriptor>()
-                .filter { it.isVar || primaryConstructorProperties.contains(it) }
+                    .filter { (it.isVar && !it.annotations.serialTransient) || primaryConstructorProperties.contains(it) }
                     .map { prop -> SerializableProperty(prop, primaryConstructorProperties[prop] ?: false) }
                 .toList()
 

@@ -143,6 +143,7 @@ class SerializerCodegenImpl(
             // loop for all properties
             for (index in orderedProperties.indices) {
                 val property = orderedProperties[index]
+                if (property.transient) continue
                 // output.writeXxxElementValue(classDesc, index, value)
                 load(outputVar, kOutputType)
                 load(descVar, descType)
@@ -235,38 +236,45 @@ class SerializerCodegenImpl(
             propVar = propsStartVar
             for (i in orderedProperties.indices) {
                 val property = orderedProperties[i]
-                // labelI: propX := input.readXxxValue(value)
+
+                // labelI:
                 visitLabel(labels[i + 2])
-                load(inputVar, kInputType)
-                load(descVar, descType)
-                iconst(i)
                 val propertyType = codegen.typeMapper.mapType(property.type)
-                val sti = getSerialTypeInfo(property, propertyType)
-                val useSerializer = stackValueSerializerInstance(sti)
-                invokevirtual(kInputType.internalName,
-                              "read" + sti.nn + (if (useSerializer) "Serializable" else "") + "ElementValue",
-                              "(" + descType.descriptor + "I" +
-                              (if (useSerializer) kSerialLoaderType.descriptor else "")
-                              + ")" + (if (sti.unit) "V" else sti.type.descriptor), false)
-                if (sti.unit) {
-                    StackValue.putUnitInstance(this)
+                if (!property.transient) {
+                    // propX := input.readXxxValue(value)
+                    load(inputVar, kInputType)
+                    load(descVar, descType)
+                    iconst(i)
+
+                    val sti = getSerialTypeInfo(property, propertyType)
+                    val useSerializer = stackValueSerializerInstance(sti)
+                    invokevirtual(kInputType.internalName,
+                                  "read" + sti.nn + (if (useSerializer) "Serializable" else "") + "ElementValue",
+                                  "(" + descType.descriptor + "I" +
+                                  (if (useSerializer) kSerialLoaderType.descriptor else "")
+                                  + ")" + (if (sti.unit) "V" else sti.type.descriptor), false)
+                    if (sti.unit) {
+                        StackValue.putUnitInstance(this)
+                    }
+                    else {
+                        StackValue.coerce(sti.type, propertyType, this)
+                    }
+                    store(propVar, propertyType)
+
+                    // mark read bit in mask
+                    // bitMask = bitMask | 1 << pos
+                    val addr = bitMaskOff(i)
+                    load(addr, OPT_MASK_TYPE)
+                    iconst(1 shl (i % OPT_MASK_BITS))
+                    or(OPT_MASK_TYPE)
+                    store(addr, OPT_MASK_TYPE)
                 }
-                else {
-                    StackValue.coerce(sti.type, propertyType, this)
-                }
-                store(propVar, propertyType)
-                propVar += propertyType.size
-                // mark read bit in mask
-                // bitMask = bitMask | 1 << pos
-                val addr = bitMaskOff(i)
-                load(addr, OPT_MASK_TYPE)
-                iconst(1 shl (i % OPT_MASK_BITS))
-                or(OPT_MASK_TYPE)
-                store(addr, OPT_MASK_TYPE)
                 // if (readAll == false) goto readElement
                 load(readAllVar, Type.BOOLEAN_TYPE)
                 iconst(0)
                 ificmpeq(readElementLabel)
+                // next
+                propVar += propertyType.size
             }
             val resultVar = propVar
             // readEnd: input.readEnd(classDesc)
@@ -279,10 +287,10 @@ class SerializerCodegenImpl(
             val nonThrowLabel = Label()
             val throwLabel = Label()
             for ((i, property) in properties.serializableConstructorProperties.withIndex()) {
-                if (property.optional) {
+                if (property.optional || property.transient) {
                     // todo: Normal reporting of error
                     if (!property.isConstructorParameterWithDefault)
-                        throw CompilationException("Property ${property.name} was declared as optional but has no default value", null, null)
+                        throw CompilationException("Property ${property.name} was declared as optional/transient but has no default value", null, null)
                 }
                 else {
                     genValidateProperty(i, ::bitMaskOff)
