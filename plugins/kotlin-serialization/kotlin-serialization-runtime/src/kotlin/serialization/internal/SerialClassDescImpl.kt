@@ -19,6 +19,7 @@ package kotlin.serialization.internal
 import java.util.*
 import kotlin.serialization.KSerialClassDesc
 import kotlin.serialization.KSerialClassKind
+import kotlin.serialization.SerializationException
 
 open class SerialClassDescImpl(override val name: String) : KSerialClassDesc {
     override val kind: KSerialClassKind get() = KSerialClassKind.CLASS
@@ -32,7 +33,7 @@ open class SerialClassDescImpl(override val name: String) : KSerialClassDesc {
     }
 
     override fun getElementName(index: Int): String = names[index]
-    override fun getElementIndex(name: String): Int = indices[name] ?: throw IllegalArgumentException("Unknown name '$name'")
+    override fun getElementIndex(name: String): Int = indices[name] ?: throw SerializationException("Unknown name '$name'")
 
     private fun buildIndices(): Map<String, Int> {
         val indices = HashMap<String, Int>()

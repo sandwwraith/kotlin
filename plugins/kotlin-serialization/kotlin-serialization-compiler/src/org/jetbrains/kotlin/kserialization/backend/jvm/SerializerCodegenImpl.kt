@@ -87,6 +87,7 @@ class SerializerCodegenImpl(
             invokespecial(descImplType.internalName, "<init>", "(Ljava/lang/String;)V", false)
             store(classDescVar, descImplType)
             for (property in orderedProperties) {
+                if (property.transient) continue
                 load(classDescVar, descImplType)
                 aconst(property.name)
                 invokevirtual(descImplType.internalName, "addElement", "(Ljava/lang/String;)V", false)
@@ -141,8 +142,9 @@ class SerializerCodegenImpl(
                           ")" + kOutputType.descriptor, false)
             store(outputVar, kOutputType)
             // loop for all properties
-            for (index in orderedProperties.indices) {
-                val property = orderedProperties[index]
+            val labeledProperties = orderedProperties.filter { !it.transient }
+            for (index in labeledProperties.indices) {
+                val property = labeledProperties[index]
                 if (property.transient) continue
                 // output.writeXxxElementValue(classDesc, index, value)
                 load(outputVar, kOutputType)
@@ -217,34 +219,34 @@ class SerializerCodegenImpl(
                           "(" + descType.descriptor + ")I", false)
             store(indexVar, Type.INT_TYPE)
             // switch(index)
+            val labeledProperties = orderedProperties.filter { !it.transient }
             val readAllLabel = Label()
             val readEndLabel = Label()
-            val labels = arrayOfNulls<Label>(orderedProperties.size + 2)
+            val labels = arrayOfNulls<Label>(labeledProperties.size + 2)
             labels[0] = readAllLabel // READ_ALL
             labels[1] = readEndLabel // READ_DONE
-            for (i in orderedProperties.indices) {
+            for (i in labeledProperties.indices) {
                 labels[i + 2] = Label()
             }
             load(indexVar, Type.INT_TYPE)
             // todo: readEnd is currently default, should probably throw exception instead
-            tableswitch(-2, orderedProperties.size - 1, readEndLabel, *labels)
+            tableswitch(-2, labeledProperties.size - 1, readEndLabel, *labels)
             // readAll: readAll := true
             visitLabel(readAllLabel)
             iconst(1)
             store(readAllVar, Type.BOOLEAN_TYPE)
             // loop for all properties
             propVar = propsStartVar
-            for (i in orderedProperties.indices) {
-                val property = orderedProperties[i]
-
-                // labelI:
-                visitLabel(labels[i + 2])
+            var labelNum = 0
+            for ((index, property) in orderedProperties.withIndex()) {
                 val propertyType = codegen.typeMapper.mapType(property.type)
                 if (!property.transient) {
+                    // labelI:
+                    visitLabel(labels[labelNum + 2])
                     // propX := input.readXxxValue(value)
                     load(inputVar, kInputType)
                     load(descVar, descType)
-                    iconst(i)
+                    iconst(labelNum)
 
                     val sti = getSerialTypeInfo(property, propertyType)
                     val useSerializer = stackValueSerializerInstance(sti)
@@ -262,17 +264,18 @@ class SerializerCodegenImpl(
                     store(propVar, propertyType)
 
                     // mark read bit in mask
-                    // bitMask = bitMask | 1 << pos
-                    val addr = bitMaskOff(i)
+                    // bitMask = bitMask | 1 << index
+                    val addr = bitMaskOff(index)
                     load(addr, OPT_MASK_TYPE)
-                    iconst(1 shl (i % OPT_MASK_BITS))
+                    iconst(1 shl (index % OPT_MASK_BITS))
                     or(OPT_MASK_TYPE)
                     store(addr, OPT_MASK_TYPE)
+                    // if (readAll == false) goto readElement
+                    load(readAllVar, Type.BOOLEAN_TYPE)
+                    iconst(0)
+                    ificmpeq(readElementLabel)
+                    labelNum++
                 }
-                // if (readAll == false) goto readElement
-                load(readAllVar, Type.BOOLEAN_TYPE)
-                iconst(0)
-                ificmpeq(readElementLabel)
                 // next
                 propVar += propertyType.size
             }
