@@ -45,8 +45,6 @@
         <artifact name="SerializationRuntime" />
       </option>
       <option name="AntTarget" enabled="true" antfile="file://$PROJECT_DIR$/idea-runner/runner.xml" target="force-enable-kotlin-plugin" />
-      <option name="AntTarget" enabled="true" antfile="file://$PROJECT_DIR$/idea-runner/runner.xml" target="copy-runtime-for-idea-plugin" />
-      <option name="AntTarget" enabled="true" antfile="file://$PROJECT_DIR$/idea-runner/runner.xml" target="copy-runtime-for-jps-plugin" />
     </method>
   </configuration>
 </component>

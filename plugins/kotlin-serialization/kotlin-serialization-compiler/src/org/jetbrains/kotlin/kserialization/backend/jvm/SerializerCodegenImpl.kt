@@ -295,6 +295,7 @@ class SerializerCodegenImpl(
                 // result := ... <created object>
                 store(resultVar, serializableAsmType)
                 // set other properties
+                propVar = propsStartVar + properties.serializableConstructorProperties.map { codegen.typeMapper.mapType(it.type).size }.sum()
                 genSetSerializableStandaloneProperties(expressionCodegen, propVar, resultVar, ::bitMaskOff)
                 // load result
                 load(resultVar, serializableAsmType)
