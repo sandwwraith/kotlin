@@ -33,6 +33,7 @@ internal val packageFqName = FqName("kotlin.serialization")
 // ---- kotlin.serialization.KSerializer
 
 internal  val kSerializerName = Name.identifier("KSerializer")
+internal val kSerializerConstructorMarkerName = Name.identifier("SerializationConstructorMarker")
 internal  val kSerializerFqName = packageFqName.child(kSerializerName)
 
 fun isKSerializer(type: KotlinType?): Boolean =
@@ -40,6 +41,9 @@ fun isKSerializer(type: KotlinType?): Boolean =
 
 fun ClassDescriptor.getKSerializerDescriptor(): ClassDescriptor =
         module.findClassAcrossModuleDependencies(ClassId(packageFqName, kSerializerName))!!
+
+fun ClassDescriptor.getKSerializerConstructorMarker(): ClassDescriptor =
+        module.findClassAcrossModuleDependencies(ClassId(packageFqName, kSerializerConstructorMarkerName))!!
 
 fun ClassDescriptor.getKSerializerType(argument: SimpleType): SimpleType {
     val projectionType = Variance.INVARIANT
@@ -108,7 +112,7 @@ val KotlinType?.toClassDescriptor: ClassDescriptor?
     get() = this?.constructor?.declarationDescriptor as? ClassDescriptor
 
 
-val ClassDescriptor.isDefaultSerializable: Boolean
+val ClassDescriptor.isDefaultSerializable: Boolean //todo normal checking
     get() = annotations.hasAnnotation(serializableAnnotationFqName) && annotations.serializableWith == null
 
 // serializer that was declared for this type
@@ -156,10 +160,7 @@ fun ClassDescriptor.checkSaveMethodResult(type: KotlinType): Boolean =
 fun ClassDescriptor.checkLoadMethodParameters(parameters: List<ValueParameterDescriptor>) : Boolean =
         parameters.size == 1
 
-// todo: serialization: do an actual check
-fun ClassDescriptor.checkLoadMethodResult(type: KotlinType): Boolean =
-        true
-
+fun ClassDescriptor.checkLoadMethodResult(type: KotlinType): Boolean = getSerializableClassDescriptorBySerializer(this)?.defaultType == type
 
 // ----------------
 

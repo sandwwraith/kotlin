@@ -18,10 +18,12 @@ package org.jetbrains.kotlin.kserialization.extensions
 
 import org.jetbrains.kotlin.codegen.ImplementationBodyCodegen
 import org.jetbrains.kotlin.codegen.extensions.ExpressionCodegenExtension
+import org.jetbrains.kotlin.kserialization.backend.jvm.SerializableCodegenImpl
 import org.jetbrains.kotlin.kserialization.backend.jvm.SerializerCodegenImpl
 
 class SerializationCodegenExtension : ExpressionCodegenExtension {
     override fun generateClassSyntheticParts(codegen: ImplementationBodyCodegen) {
+        SerializableCodegenImpl.generateSerializableExtensions(codegen)
         SerializerCodegenImpl.generateSerializerExtensions(codegen)
     }
 }

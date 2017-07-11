@@ -32,7 +32,7 @@ abstract class SerializerCodegen(declaration: KtPureClassOrObject, bindingContex
     protected val serializableDescriptor: ClassDescriptor = getSerializableClassDescriptorBySerializer(serializerDescriptor)!!
     protected val serialName: String = serializableDescriptor.fqNameUnsafe.asString()
     protected val properties = SerializableProperties(serializableDescriptor, bindingContext)
-    protected val orderedProperties = (properties.serializableConstructorProperties + properties.serializableStandaloneProperties)
+    protected val orderedProperties = properties.serializableProperties
 
     fun generate() {
         check(properties.isExternallySerializable) { "Class ${serializableDescriptor.name} is not externally serializable" }

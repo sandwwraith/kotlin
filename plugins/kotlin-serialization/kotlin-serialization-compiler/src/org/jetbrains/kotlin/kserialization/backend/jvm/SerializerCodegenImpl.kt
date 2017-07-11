@@ -20,10 +20,7 @@ import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.codegen.*
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.kserialization.backend.common.SerializerCodegen
-import org.jetbrains.kotlin.kserialization.resolve.SerializableProperty
-import org.jetbrains.kotlin.kserialization.resolve.getSerializableClassDescriptorBySerializer
-import org.jetbrains.kotlin.kserialization.resolve.toClassDescriptor
-import org.jetbrains.kotlin.kserialization.resolve.typeSerializer
+import org.jetbrains.kotlin.kserialization.resolve.*
 import org.jetbrains.kotlin.load.kotlin.TypeMappingMode
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
@@ -31,7 +28,6 @@ import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.descriptorUtil.classId
 import org.jetbrains.kotlin.resolve.jvm.AsmTypes
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.OtherOrigin
-import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodSignature
 import org.jetbrains.kotlin.serialization.deserialization.findClassAcrossModuleDependencies
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.org.objectweb.asm.Label
@@ -52,13 +48,6 @@ class SerializerCodegenImpl(
     private val kSerialLoaderType = Type.getObjectType("kotlin/serialization/KSerialLoader")
     private val kSerializerType = Type.getObjectType("kotlin/serialization/KSerializer")
     private val kSerializerArrayType = Type.getObjectType("[Lkotlin/serialization/KSerializer;")
-
-    private val serializationExceptionName = "kotlin/serialization/SerializationException"
-    private val serializationExceptionMissingFieldName = "kotlin/serialization/MissingFieldException"
-
-    private val OPT_MASK_TYPE = Type.INT_TYPE
-    private val OPT_MASK_BITS = 32
-    private val OPT_MASK_FILLED = -1
 
     private val serialDescField = "\$\$serialDesc"
 
@@ -102,20 +91,9 @@ class SerializerCodegenImpl(
         store(classDescVar, descType)
     }
 
-    // helper
-    private fun generateMethod(function: FunctionDescriptor,
-                               block: InstructionAdapter.(JvmMethodSignature, ExpressionCodegen) -> Unit) {
-        codegen.functionCodegen.generateMethod(OtherOrigin(codegen.myClass, function), function,
-                                               object : FunctionGenerationStrategy.CodegenBased(codegen.state) {
-                                                   override fun doGenerateBody(codegen: ExpressionCodegen, signature: JvmMethodSignature) {
-                                                       codegen.v.block(signature, codegen)
-                                                   }
-                                               })
-    }
-
     override fun generateSerializableClassProperty(property: PropertyDescriptor) {
         // todo: store it into static field?
-        generateMethod(property.getter!!) { signature, expressionCodegen ->
+        codegen.generateMethod(property.getter!!) { signature, expressionCodegen ->
             aconst(serializableAsmType)
             AsmUtil.wrapJavaClassIntoKClass(this)
             areturn(AsmTypes.K_CLASS_TYPE)
@@ -125,7 +103,7 @@ class SerializerCodegenImpl(
     override fun generateSave(
             function: FunctionDescriptor
     ) {
-        generateMethod(function) { signature, expressionCodegen ->
+        codegen.generateMethod(function) { signature, expressionCodegen ->
             // fun save(output: KOutput, obj : T)
             val outputVar = 1
             val objVar = 2
@@ -173,7 +151,7 @@ class SerializerCodegenImpl(
     override fun generateLoad(
             function: FunctionDescriptor
     ) {
-        generateMethod(function) { signature, expressionCodegen ->
+        codegen.generateMethod(function) { signature, expressionCodegen ->
             // fun load(input: KInput): T
             val inputVar = 1
             val descVar = 2
@@ -309,28 +287,11 @@ class SerializerCodegenImpl(
             visitLabel(nonThrowLabel)
             anew(serializableAsmType)
             dup()
-            val constructorDesc = StringBuilder("(")
-            propVar = propsStartVar
-            for (property in properties.serializableConstructorProperties) {
-                val propertyType = codegen.typeMapper.mapType(property.type)
-                constructorDesc.append(propertyType.descriptor)
-                load(propVar, propertyType)
-                propVar += propertyType.size
-            }
-            if (!properties.primaryConstructorWithDefaults) {
-                constructorDesc.append(")V")
-            }
-            else {
-                val cnt = properties.serializableConstructorProperties.size.coerceAtMost(32) //only 32 default values are supported
-                val mask = if (cnt == 32) -1 else ((1 shl cnt) - 1)
-                load(bitMaskBase, OPT_MASK_TYPE)
-                iconst(mask)
-                xor(Type.INT_TYPE)
-                aconst(null)
-                constructorDesc.append("ILkotlin/jvm/internal/DefaultConstructorMarker;)V")
-            }
-            invokespecial(serializableAsmType.internalName, "<init>", constructorDesc.toString(), false)
-            if (!properties.serializableStandaloneProperties.isEmpty()) {
+            val constructorDesc = if (serializableDescriptor.isDefaultSerializable)
+                buildInteralConstructorDesc(propsStartVar, bitMaskBase)
+            else buildExternalConstructorDesc(propsStartVar, bitMaskBase)
+            invokespecial(serializableAsmType.internalName, "<init>", constructorDesc, false)
+            if (!serializableDescriptor.isDefaultSerializable && !properties.serializableStandaloneProperties.isEmpty()) {
                 // result := ... <created object>
                 store(resultVar, serializableAsmType)
                 // set other properties
@@ -344,21 +305,43 @@ class SerializerCodegenImpl(
         }
     }
 
-    private fun InstructionAdapter.genExceptionThrow(exceptionClass: String, message: String) {
-        anew(Type.getObjectType(exceptionClass))
-        dup()
-        aconst(message)
-        invokespecial(exceptionClass, "<init>", "(Ljava/lang/String;)V", false)
-        checkcast(Type.getObjectType("java/lang/Throwable"))
-        athrow()
+    private fun InstructionAdapter.buildInteralConstructorDesc(propsStartVar: Int, bitMaskBase: Int): String {
+        val constructorDesc = StringBuilder("(I")
+        load(bitMaskBase, OPT_MASK_TYPE)
+        var propVar = propsStartVar
+        for (property in properties.serializableProperties) {
+            val propertyType = codegen.typeMapper.mapType(property.type)
+            constructorDesc.append(propertyType.descriptor)
+            load(propVar, propertyType)
+            propVar += propertyType.size
+        }
+        constructorDesc.append("Lkotlin/serialization/SerializationConstructorMarker;)V")
+        aconst(null)
+        return constructorDesc.toString()
     }
 
-    private fun InstructionAdapter.genValidateProperty(i: Int, bitMaskPos: (Int) -> Int) {
-        val addr = bitMaskPos(i)
-        load(addr, OPT_MASK_TYPE)
-        iconst(1 shl (i % OPT_MASK_BITS))
-        and(OPT_MASK_TYPE)
-        iconst(0)
+    private fun InstructionAdapter.buildExternalConstructorDesc(propsStartVar: Int, bitMaskBase: Int): String {
+        val constructorDesc = StringBuilder("(")
+        var propVar = propsStartVar
+        for (property in properties.serializableConstructorProperties) {
+            val propertyType = codegen.typeMapper.mapType(property.type)
+            constructorDesc.append(propertyType.descriptor)
+            load(propVar, propertyType)
+            propVar += propertyType.size
+        }
+        if (!properties.primaryConstructorWithDefaults) {
+            constructorDesc.append(")V")
+        }
+        else {
+            val cnt = properties.serializableConstructorProperties.size.coerceAtMost(32) //only 32 default values are supported
+            val mask = if (cnt == 32) -1 else ((1 shl cnt) - 1)
+            load(bitMaskBase, OPT_MASK_TYPE)
+            iconst(mask)
+            xor(Type.INT_TYPE)
+            aconst(null)
+            constructorDesc.append("ILkotlin/jvm/internal/DefaultConstructorMarker;)V")
+        }
+        return constructorDesc.toString()
     }
 
     private fun InstructionAdapter.genSetSerializableStandaloneProperties(

@@ -24,7 +24,7 @@ import org.jetbrains.kotlin.resolve.descriptorUtil.hasDefaultValue
 import org.jetbrains.kotlin.resolve.descriptorUtil.hasOwnParametersWithDefaultValue
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 
-class SerializableProperties(serializableClass: ClassDescriptor, bindingContext: BindingContext) {
+class SerializableProperties(private val serializableClass: ClassDescriptor, bindingContext: BindingContext) {
     private val primaryConstructorParameters: List<ValueParameterDescriptor> =
             serializableClass.unsubstitutedPrimaryConstructor?.valueParameters ?: emptyList()
 
@@ -41,9 +41,14 @@ class SerializableProperties(serializableClass: ClassDescriptor, bindingContext:
             serializableClass.unsubstitutedMemberScope.getContributedDescriptors(DescriptorKindFilter.VARIABLES)
                 .asSequence()
                 .filterIsInstance<PropertyDescriptor>()
-                    .filter { (it.isVar && !it.annotations.serialTransient) || primaryConstructorProperties.contains(it) }
+                    .filter(this::isPropSerializable)
                     .map { prop -> SerializableProperty(prop, primaryConstructorProperties[prop] ?: false) }
-                .toList()
+                    .partition { primaryConstructorProperties.contains(it.descriptor) }
+                    .run { first + second }
+
+    private fun isPropSerializable(it: PropertyDescriptor) =
+            if (serializableClass.isDefaultSerializable) !it.annotations.serialTransient
+            else (it.isVar && !it.annotations.serialTransient) || primaryConstructorProperties.contains(it)
 
     val serializableConstructorProperties: List<SerializableProperty> =
             serializableProperties.asSequence()

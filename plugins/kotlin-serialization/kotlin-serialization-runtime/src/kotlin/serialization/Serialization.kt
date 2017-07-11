@@ -64,8 +64,13 @@ interface KSerializer<T>: KSerialSaver<T>, KSerialLoader<T> {
     val serializableClass: KClass<*>
 }
 
+class SerializationConstructorMarker private constructor()
+
 @Suppress("UNCHECKED_CAST")
 fun <T : Any> KClass<T>.serializer(): KSerializer<T> = companionObjectInstance as KSerializer<T>
+
+
+// ====== Exceptions ======
 
 open class SerializationException(s: String) : RuntimeException(s)
 

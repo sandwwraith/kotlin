@@ -16,16 +16,19 @@
 
 package org.jetbrains.kotlin.kserialization.resolve
 
+import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.descriptors.impl.*
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.BindingContext
-import org.jetbrains.kotlin.resolve.BindingTrace
+import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
 import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlin.types.KotlinTypeFactory
 import org.jetbrains.kotlin.types.Variance
 import org.jetbrains.kotlin.types.typeUtil.createProjection
+import org.jetbrains.kotlin.types.typeUtil.makeNullable
 import java.util.*
 
 object KSerializerDescriptorResolver {
@@ -37,6 +40,8 @@ object KSerializerDescriptorResolver {
     val SERIALIZABLE_CLASS_NAME = Name.identifier("serializableClass")
     val SAVE_NAME = Name.identifier(SAVE)
     val LOAD_NAME = Name.identifier(LOAD)
+    val DUMMY_PARAM_NAME = Name.identifier("serializationConstructorMarker")
+
 
     fun addSerializableSupertypes(classDescriptor: ClassDescriptor, supertypes: MutableList<KotlinType>) {
         if (classDescriptor.isDefaultSerializable && supertypes.none(::isJavaSerializable)) {
@@ -152,41 +157,44 @@ object KSerializerDescriptorResolver {
         return functionDescriptor
     }
 
-    // todo: not used yet, do we need a descriptor at all?
     fun createLoadConstructorDescriptor(
-            constructorParameters: List<ValueParameterDescriptor>,
             classDescriptor: ClassDescriptor,
-            trace: BindingTrace
-    ): ConstructorDescriptor {
-        val functionDescriptor = ClassConstructorDescriptorImpl.create(
+            bindingContext: BindingContext
+    ): ClassConstructorDescriptor {
+        if (!classDescriptor.isDefaultSerializable) throw IllegalArgumentException()
+
+        val functionDescriptor = ClassConstructorDescriptorImpl.createSynthesized(
                 classDescriptor,
                 Annotations.EMPTY,
-                true,
+                false,
                 classDescriptor.source
         )
 
-        val parameterDescriptors = arrayListOf<ValueParameterDescriptor>()
+        val markerDesc = classDescriptor.getKSerializerConstructorMarker()
+        val markerType = KotlinTypeFactory.simpleType(Annotations.EMPTY, markerDesc.typeConstructor, emptyList(), true)
 
-        for (parameter in constructorParameters) {
-            val propertyDescriptor = trace.bindingContext.get(BindingContext.VALUE_PARAMETER_AS_PROPERTY, parameter)
-            // If a parameter doesn't have the corresponding property, it must not have a default value in the 'copy' function
-            val declaresDefaultValue = propertyDescriptor != null
-            val parameterDescriptor = ValueParameterDescriptorImpl(
-                    functionDescriptor, null, parameter.index, parameter.annotations, parameter.name, parameter.type, declaresDefaultValue,
-                    parameter.isCrossinline, parameter.isNoinline, parameter.varargElementType, parameter.source
-            )
-            parameterDescriptors.add(parameterDescriptor)
-            if (declaresDefaultValue) {
-                trace.record(BindingContext.VALUE_PARAMETER_AS_PROPERTY, parameterDescriptor, propertyDescriptor)
-            }
+        val parameterDescsAsProps = SerializableProperties(classDescriptor, bindingContext).serializableProperties.map { it.descriptor }
+        var i = 0
+        val consParams = mutableListOf<ValueParameterDescriptor>()
+        consParams.add(ValueParameterDescriptorImpl(functionDescriptor, null, i++, Annotations.EMPTY, Name.identifier("seen"), functionDescriptor.builtIns.intType, false,
+                                                    false, false, null, functionDescriptor.source))
+        for (prop in parameterDescsAsProps) {
+            consParams.add(ValueParameterDescriptorImpl(functionDescriptor, null, i++, prop.annotations, prop.name, prop.type.makeNullableIfNotPrimitive(), false, false,
+                                                        false, null, functionDescriptor.source))
         }
+        consParams.add(ValueParameterDescriptorImpl(functionDescriptor, null, i++, Annotations.EMPTY, DUMMY_PARAM_NAME, markerType, false,
+                                                    false, false, null, functionDescriptor.source))
 
         functionDescriptor.initialize(
-                constructorParameters,
-                Visibilities.INTERNAL
+                consParams,
+                Visibilities.PUBLIC
         )
 
-        //trace.record(BindingContext.SERIALIZABLE_CLASS_LOAD_CONSTRUCTOR, classDescriptor, functionDescriptor)
+        functionDescriptor.returnType = classDescriptor.defaultType
         return functionDescriptor
     }
+
+    private fun KotlinType.makeNullableIfNotPrimitive() =
+            if (KotlinBuiltIns.isPrimitiveType(this)) this
+            else this.makeNullable()
 }
