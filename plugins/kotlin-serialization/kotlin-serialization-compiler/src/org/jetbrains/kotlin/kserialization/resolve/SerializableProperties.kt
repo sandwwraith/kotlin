@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.kserialization.resolve
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
 import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor
+import org.jetbrains.kotlin.descriptors.Visibilities
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.descriptorUtil.hasDefaultValue
 import org.jetbrains.kotlin.resolve.descriptorUtil.hasOwnParametersWithDefaultValue
@@ -48,7 +49,7 @@ class SerializableProperties(private val serializableClass: ClassDescriptor, bin
 
     private fun isPropSerializable(it: PropertyDescriptor) =
             if (serializableClass.isDefaultSerializable) !it.annotations.serialTransient
-            else (it.isVar && !it.annotations.serialTransient) || primaryConstructorProperties.contains(it)
+            else !Visibilities.isPrivate(it.visibility) && ((it.isVar && !it.annotations.serialTransient) || primaryConstructorProperties.contains(it))
 
     val serializableConstructorProperties: List<SerializableProperty> =
             serializableProperties.asSequence()
