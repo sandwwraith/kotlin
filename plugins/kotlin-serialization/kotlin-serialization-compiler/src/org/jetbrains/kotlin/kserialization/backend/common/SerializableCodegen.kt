@@ -18,6 +18,7 @@ package org.jetbrains.kotlin.kserialization.backend.common
 
 import org.jetbrains.kotlin.descriptors.ClassConstructorDescriptor
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
+import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.kserialization.resolve.KSerializerDescriptorResolver
 import org.jetbrains.kotlin.kserialization.resolve.SerializableProperties
 import org.jetbrains.kotlin.psi.KtPureClassOrObject
@@ -34,13 +35,21 @@ abstract class SerializableCodegen(declaration: KtPureClassOrObject, private val
     protected val properties = SerializableProperties(serializableDescriptor, bindingContext)
 
     fun generate() {
-        generateSyntheticInternalConstructorIfNeeded()
+        generateSyntheticInternalConstructor()
+        generateSyntheticMethods()
     }
 
-    private fun generateSyntheticInternalConstructorIfNeeded() {
+    private fun generateSyntheticInternalConstructor() {
         val constrDesc = KSerializerDescriptorResolver.createLoadConstructorDescriptor(serializableDescriptor, bindingContext)
         generateInternalConstructor(constrDesc)
     }
 
+    private fun generateSyntheticMethods() {
+        val func = KSerializerDescriptorResolver.createWriteSelfFunctionDescriptor(serializableDescriptor)
+        generateWriteSelfMethod(func)
+    }
+
     protected abstract fun generateInternalConstructor(constructorDescriptor: ClassConstructorDescriptor)
+
+    protected abstract fun generateWriteSelfMethod(methodDescriptor: FunctionDescriptor)
 }

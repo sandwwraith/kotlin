@@ -20,7 +20,7 @@ import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
 import org.jetbrains.kotlin.descriptors.SimpleFunctionDescriptor
 import org.jetbrains.kotlin.kserialization.resolve.KSerializerDescriptorResolver
-import org.jetbrains.kotlin.kserialization.resolve.isDefaultSerializable
+import org.jetbrains.kotlin.kserialization.resolve.isInternalSerializable
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.name.SpecialNames
 import org.jetbrains.kotlin.resolve.extensions.SyntheticResolveExtension
@@ -29,7 +29,7 @@ import java.util.*
 
 class SerializationResolveExtension : SyntheticResolveExtension {
     override fun getSyntheticCompanionObjectNameIfNeeded(thisDescriptor: ClassDescriptor): Name? =
-            if (thisDescriptor.isDefaultSerializable) SpecialNames.DEFAULT_NAME_FOR_COMPANION_OBJECT
+            if (thisDescriptor.isInternalSerializable) SpecialNames.DEFAULT_NAME_FOR_COMPANION_OBJECT
             else null
 
     override fun addSyntheticSupertypes(thisDescriptor: ClassDescriptor, supertypes: MutableList<KotlinType>) {

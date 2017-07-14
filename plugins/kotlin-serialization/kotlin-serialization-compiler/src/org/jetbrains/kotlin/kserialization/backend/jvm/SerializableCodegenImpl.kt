@@ -21,16 +21,18 @@ import org.jetbrains.kotlin.codegen.ExpressionCodegen
 import org.jetbrains.kotlin.codegen.ImplementationBodyCodegen
 import org.jetbrains.kotlin.descriptors.ClassConstructorDescriptor
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
+import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
 import org.jetbrains.kotlin.kserialization.backend.common.SerializableCodegen
 import org.jetbrains.kotlin.kserialization.resolve.SerializableProperties
 import org.jetbrains.kotlin.kserialization.resolve.SerializableProperty
-import org.jetbrains.kotlin.kserialization.resolve.isDefaultSerializable
+import org.jetbrains.kotlin.kserialization.resolve.isInternalSerializable
 import org.jetbrains.kotlin.psi.KtAnonymousInitializer
 import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.descriptorUtil.getSuperClassOrAny
+import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodSignature
 import org.jetbrains.org.objectweb.asm.Label
 import org.jetbrains.org.objectweb.asm.Type
 import org.jetbrains.org.objectweb.asm.commons.InstructionAdapter
@@ -50,7 +52,7 @@ class SerializableCodegenImpl(
     companion object {
         fun generateSerializableExtensions(codegen: ImplementationBodyCodegen) {
             val serializableClass = codegen.descriptor
-            if (serializableClass.isDefaultSerializable)
+            if (serializableClass.isInternalSerializable)
                 SerializableCodegenImpl(codegen, serializableClass).generate()
         }
     }
@@ -71,6 +73,44 @@ class SerializableCodegenImpl(
 
     override fun generateInternalConstructor(constructorDescriptor: ClassConstructorDescriptor) {
         classCodegen.generateMethod(constructorDescriptor, { sig, expr -> doGenerateConstructorImpl(expr) })
+    }
+
+    override fun generateWriteSelfMethod(methodDescriptor: FunctionDescriptor) {
+        classCodegen.generateMethod(methodDescriptor, { sig, expr -> doGenerateWriteSelf(expr, sig) })
+    }
+
+    private fun InstructionAdapter.doGenerateWriteSelf(exprCodegen: ExpressionCodegen, signature: JvmMethodSignature) {
+        val thisI = 0
+        val outputI = 1
+        val serialDescI = 2
+//        val offsetI = 3
+
+        val superClass = serializableDescriptor.getSuperClassOrAny()
+        val myPropsStart: Int
+        if (superClass.isInternalSerializable) {
+            myPropsStart = SerializableProperties(superClass, classCodegen.bindingContext).serializableProperties.size
+            //super.writeSelf(output, serialDesc)
+            load(thisI, thisAsmType)
+            load(outputI, kOutputType)
+            load(serialDescI, descType)
+            invokespecial(classCodegen.typeMapper.mapType(superClass).internalName, signature.asmMethod.name, signature.asmMethod.descriptor, false)
+        }
+        else {
+            myPropsStart = 0
+            // offset = 0
+//            iconst(0)
+        }
+
+        for (i in myPropsStart until properties.serializableProperties.size) {
+            val property = properties[i]
+            // output.writeXxxElementValue (desc, index, value)
+            load(outputI, kOutputType)
+            load(serialDescI, descType)
+            iconst(i)
+            genKOutputMethodCall(property, classCodegen, exprCodegen, thisAsmType, thisI)
+        }
+
+        areturn(Type.VOID_TYPE)
     }
 
     private fun InstructionAdapter.doGenerateConstructorImpl(exprCodegen: ExpressionCodegen) {
@@ -141,7 +181,7 @@ class SerializableCodegenImpl(
 
         load(0, thisAsmType)
 
-        if (!superClass.isDefaultSerializable) {
+        if (!superClass.isInternalSerializable) {
             require(superClass.constructors.firstOrNull { it.valueParameters.isEmpty() } != null) { "Non-serializable parent of serializable class must have no arg constructor" }
 
             // call
@@ -150,7 +190,7 @@ class SerializableCodegenImpl(
         }
         else {
             val superProps = SerializableProperties(superClass, classCodegen.bindingContext).serializableProperties
-            val creator = buildInteralConstructorDesc(propStartVar, 1, classCodegen, superProps)
+            val creator = buildInternalConstructorDesc(propStartVar, 1, classCodegen, superProps)
             invokespecial(superType, "<init>", creator, false)
             return superProps.size to propStartVar + superProps.sumBy { it.asmType.size }
         }

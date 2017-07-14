@@ -46,7 +46,7 @@ class SerializableProperties(private val serializableClass: ClassDescriptor, val
                     .partition { primaryConstructorProperties.contains(it.descriptor) }
                     .run {
                         val supers = serializableClass.getSuperClassNotAny()
-                        if (supers == null || !supers.isDefaultSerializable)
+                        if (supers == null || !supers.isInternalSerializable)
                             first + second
                         else
                             SerializableProperties(supers, bindingContext).serializableProperties + first + second
@@ -54,7 +54,7 @@ class SerializableProperties(private val serializableClass: ClassDescriptor, val
 
 
     private fun isPropSerializable(it: PropertyDescriptor) =
-            if (serializableClass.isDefaultSerializable) !it.annotations.serialTransient
+            if (serializableClass.isInternalSerializable) !it.annotations.serialTransient
             else !Visibilities.isPrivate(it.visibility) && ((it.isVar && !it.annotations.serialTransient) || primaryConstructorProperties.contains(it))
 
     val serializableConstructorProperties: List<SerializableProperty> =

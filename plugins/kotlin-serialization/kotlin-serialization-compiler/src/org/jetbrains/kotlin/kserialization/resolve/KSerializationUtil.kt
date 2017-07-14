@@ -42,8 +42,6 @@ fun isKSerializer(type: KotlinType?): Boolean =
 fun ClassDescriptor.getKSerializerDescriptor(): ClassDescriptor =
         module.findClassAcrossModuleDependencies(ClassId(packageFqName, kSerializerName))!!
 
-fun ClassDescriptor.getKSerializerConstructorMarker(): ClassDescriptor =
-        module.findClassAcrossModuleDependencies(ClassId(packageFqName, kSerializerConstructorMarkerName))!!
 
 fun ClassDescriptor.getKSerializerType(argument: SimpleType): SimpleType {
     val projectionType = Variance.INVARIANT
@@ -112,7 +110,7 @@ val KotlinType?.toClassDescriptor: ClassDescriptor?
     get() = this?.constructor?.declarationDescriptor as? ClassDescriptor
 
 
-val ClassDescriptor.isDefaultSerializable: Boolean //todo normal checking
+val ClassDescriptor.isInternalSerializable: Boolean //todo normal checking
     get() = annotations.hasAnnotation(serializableAnnotationFqName) && annotations.serializableWith == null
 
 // serializer that was declared for this type
@@ -121,7 +119,7 @@ internal val ClassDescriptor?.classSerializer: KotlinType?
         // serializer annotation on class?
         annotations.serializableWith?.let { return it }
         // default serializable?
-        if (isDefaultSerializable) return companionObjectDescriptor?.defaultType
+        if (isInternalSerializable) return companionObjectDescriptor?.defaultType
         return null
     }
 
@@ -142,7 +140,7 @@ fun getSerializableClassDescriptorBySerializer(serializerDescriptor: ClassDescri
     if (serializerForClass != null) return serializerForClass.toClassDescriptor
     if (!serializerDescriptor.isCompanionObject) return null
     val classDescriptor = (serializerDescriptor.containingDeclaration as? ClassDescriptor) ?: return null
-    if (!classDescriptor.isDefaultSerializable) return null
+    if (!classDescriptor.isInternalSerializable) return null
     return classDescriptor
 }
 
@@ -168,3 +166,13 @@ inline fun <reified R> Annotations.findAnnotationValue(annotationFqName: FqName,
     findAnnotation(annotationFqName)?.let { annotation ->
         annotation.allValueArguments.entries.singleOrNull { it.key.name.asString() == property }?.value?.value
     } as? R
+
+// Search utils
+
+fun ClassDescriptor.getKSerializerConstructorMarker(): ClassDescriptor =
+        module.findClassAcrossModuleDependencies(ClassId(packageFqName, kSerializerConstructorMarkerName))!!
+
+fun ClassDescriptor.getClassFromSerializationPackage(classSimpleName: String) =
+        module.findClassAcrossModuleDependencies(ClassId(packageFqName, Name.identifier(classSimpleName)))!!
+
+fun ClassDescriptor.toSimpleType(nullable: Boolean = true) = KotlinTypeFactory.simpleType(Annotations.EMPTY, this.typeConstructor, emptyList(), nullable)

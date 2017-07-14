@@ -25,7 +25,6 @@ import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
 import org.jetbrains.kotlin.types.KotlinType
-import org.jetbrains.kotlin.types.KotlinTypeFactory
 import org.jetbrains.kotlin.types.Variance
 import org.jetbrains.kotlin.types.typeUtil.createProjection
 import org.jetbrains.kotlin.types.typeUtil.makeNullable
@@ -41,10 +40,11 @@ object KSerializerDescriptorResolver {
     val SAVE_NAME = Name.identifier(SAVE)
     val LOAD_NAME = Name.identifier(LOAD)
     val DUMMY_PARAM_NAME = Name.identifier("serializationConstructorMarker")
+    val WRITE_SELF_NAME = Name.identifier("write\$Self") //todo: add it as a supertype to synthetic resolving
 
 
     fun addSerializableSupertypes(classDescriptor: ClassDescriptor, supertypes: MutableList<KotlinType>) {
-        if (classDescriptor.isDefaultSerializable && supertypes.none(::isJavaSerializable)) {
+        if (classDescriptor.isInternalSerializable && supertypes.none(::isJavaSerializable)) {
             supertypes.add(classDescriptor.getJavaSerializableType())
         }
     }
@@ -161,7 +161,7 @@ object KSerializerDescriptorResolver {
             classDescriptor: ClassDescriptor,
             bindingContext: BindingContext
     ): ClassConstructorDescriptor {
-        if (!classDescriptor.isDefaultSerializable) throw IllegalArgumentException()
+        if (!classDescriptor.isInternalSerializable) throw IllegalArgumentException()
 
         val functionDescriptor = ClassConstructorDescriptorImpl.createSynthesized(
                 classDescriptor,
@@ -171,7 +171,7 @@ object KSerializerDescriptorResolver {
         )
 
         val markerDesc = classDescriptor.getKSerializerConstructorMarker()
-        val markerType = KotlinTypeFactory.simpleType(Annotations.EMPTY, markerDesc.typeConstructor, emptyList(), true)
+        val markerType = markerDesc.toSimpleType()
 
         val parameterDescsAsProps = SerializableProperties(classDescriptor, bindingContext).serializableProperties.map { it.descriptor }
         var i = 0
@@ -197,4 +197,51 @@ object KSerializerDescriptorResolver {
     private fun KotlinType.makeNullableIfNotPrimitive() =
             if (KotlinBuiltIns.isPrimitiveType(this)) this
             else this.makeNullable()
+
+    fun createWriteSelfFunctionDescriptor(thisClass: ClassDescriptor): FunctionDescriptor {
+        val f = SimpleFunctionDescriptorImpl.create(thisClass, Annotations.EMPTY, WRITE_SELF_NAME, CallableMemberDescriptor.Kind.SYNTHESIZED, thisClass.source)
+        val returnType = f.builtIns.unitType
+
+        val args = mutableListOf<ValueParameterDescriptor>()
+        var i = 0
+        args.add(ValueParameterDescriptorImpl(
+                f,
+                null,
+                i++,
+                Annotations.EMPTY,
+                Name.identifier("output"),
+                thisClass.getClassFromSerializationPackage("KOutput").toSimpleType(false),
+                false,
+                false,
+                false,
+                null,
+                f.source)
+        )
+
+        args.add(ValueParameterDescriptorImpl(
+                f,
+                null,
+                i++,
+                Annotations.EMPTY,
+                Name.identifier("serialDesc"),
+                thisClass.getClassFromSerializationPackage("KSerialClassDesc").toSimpleType(false),
+                false,
+                false,
+                false,
+                null,
+                f.source)
+        )
+
+        f.initialize(
+                null,
+                thisClass.thisAsReceiverParameter,
+                emptyList(),
+                args,
+                returnType,
+                Modality.OPEN,
+                Visibilities.PUBLIC
+        )
+
+        return f
+    }
 }
