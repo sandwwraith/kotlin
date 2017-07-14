@@ -16,16 +16,14 @@
 
 package org.jetbrains.kotlin.kserialization.resolve
 
-import org.jetbrains.kotlin.descriptors.ClassDescriptor
-import org.jetbrains.kotlin.descriptors.PropertyDescriptor
-import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor
-import org.jetbrains.kotlin.descriptors.Visibilities
+import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.resolve.BindingContext
+import org.jetbrains.kotlin.resolve.descriptorUtil.getSuperClassNotAny
 import org.jetbrains.kotlin.resolve.descriptorUtil.hasDefaultValue
 import org.jetbrains.kotlin.resolve.descriptorUtil.hasOwnParametersWithDefaultValue
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 
-class SerializableProperties(private val serializableClass: ClassDescriptor, bindingContext: BindingContext) {
+class SerializableProperties(private val serializableClass: ClassDescriptor, val bindingContext: BindingContext) {
     private val primaryConstructorParameters: List<ValueParameterDescriptor> =
             serializableClass.unsubstitutedPrimaryConstructor?.valueParameters ?: emptyList()
 
@@ -40,12 +38,20 @@ class SerializableProperties(private val serializableClass: ClassDescriptor, bin
 
     val serializableProperties: List<SerializableProperty> =
             serializableClass.unsubstitutedMemberScope.getContributedDescriptors(DescriptorKindFilter.VARIABLES)
-                .asSequence()
-                .filterIsInstance<PropertyDescriptor>()
+                    .asSequence()
+                    .filterIsInstance<PropertyDescriptor>()
+                    .filter { it.kind == CallableMemberDescriptor.Kind.DECLARATION }
                     .filter(this::isPropSerializable)
                     .map { prop -> SerializableProperty(prop, primaryConstructorProperties[prop] ?: false) }
                     .partition { primaryConstructorProperties.contains(it.descriptor) }
-                    .run { first + second }
+                    .run {
+                        val supers = serializableClass.getSuperClassNotAny()
+                        if (supers == null || !supers.isDefaultSerializable)
+                            first + second
+                        else
+                            SerializableProperties(supers, bindingContext).serializableProperties + first + second
+                    }
+
 
     private fun isPropSerializable(it: PropertyDescriptor) =
             if (serializableClass.isDefaultSerializable) !it.annotations.serialTransient
@@ -53,8 +59,8 @@ class SerializableProperties(private val serializableClass: ClassDescriptor, bin
 
     val serializableConstructorProperties: List<SerializableProperty> =
             serializableProperties.asSequence()
-                .filter { primaryConstructorProperties.contains(it.descriptor) }
-                .toList()
+                    .filter { primaryConstructorProperties.contains(it.descriptor) }
+                    .toList()
 
     val serializableStandaloneProperties: List<SerializableProperty> =
             serializableProperties.minus(serializableConstructorProperties)

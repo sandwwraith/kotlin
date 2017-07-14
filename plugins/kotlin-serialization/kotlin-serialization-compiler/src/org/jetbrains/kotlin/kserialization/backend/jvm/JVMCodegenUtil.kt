@@ -16,10 +16,12 @@
 
 package org.jetbrains.kotlin.kserialization.backend.jvm
 
+import org.jetbrains.kotlin.codegen.ClassBodyCodegen
 import org.jetbrains.kotlin.codegen.ExpressionCodegen
 import org.jetbrains.kotlin.codegen.FunctionGenerationStrategy
 import org.jetbrains.kotlin.codegen.ImplementationBodyCodegen
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
+import org.jetbrains.kotlin.kserialization.resolve.SerializableProperty
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.OtherOrigin
 import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodSignature
 import org.jetbrains.org.objectweb.asm.Type
@@ -37,7 +39,7 @@ val OPT_MASK_TYPE: Type = Type.INT_TYPE
 val OPT_MASK_BITS = 32
 
 // compare with zero. if result == 0, property was not seen.
-fun InstructionAdapter.genValidateProperty(index: Int, bitMaskPos: (Int) -> Int) {
+internal fun InstructionAdapter.genValidateProperty(index: Int, bitMaskPos: (Int) -> Int) {
     val addr = bitMaskPos(index)
     load(addr, OPT_MASK_TYPE)
     iconst(1 shl (index % OPT_MASK_BITS))
@@ -45,7 +47,7 @@ fun InstructionAdapter.genValidateProperty(index: Int, bitMaskPos: (Int) -> Int)
     iconst(0)
 }
 
-fun InstructionAdapter.genExceptionThrow(exceptionClass: String, message: String) {
+internal fun InstructionAdapter.genExceptionThrow(exceptionClass: String, message: String) {
     anew(Type.getObjectType(exceptionClass))
     dup()
     aconst(message)
@@ -54,7 +56,22 @@ fun InstructionAdapter.genExceptionThrow(exceptionClass: String, message: String
     athrow()
 }
 
-fun ImplementationBodyCodegen.generateMethod(function: FunctionDescriptor,
+internal fun InstructionAdapter.buildInteralConstructorDesc(propsStartVar: Int, bitMaskBase: Int, codegen: ClassBodyCodegen, args: List<SerializableProperty>): String {
+    val constructorDesc = StringBuilder("(I")
+    load(bitMaskBase, OPT_MASK_TYPE)
+    var propVar = propsStartVar
+    for (property in args) {
+        val propertyType = codegen.typeMapper.mapType(property.type)
+        constructorDesc.append(propertyType.descriptor)
+        load(propVar, propertyType)
+        propVar += propertyType.size
+    }
+    constructorDesc.append("Lkotlin/serialization/SerializationConstructorMarker;)V")
+    aconst(null)
+    return constructorDesc.toString()
+}
+
+internal fun ImplementationBodyCodegen.generateMethod(function: FunctionDescriptor,
                                              block: InstructionAdapter.(JvmMethodSignature, ExpressionCodegen) -> Unit) {
     this.functionCodegen.generateMethod(OtherOrigin(this.myClass, function), function,
                                         object : FunctionGenerationStrategy.CodegenBased(this.state) {

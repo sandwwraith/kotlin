@@ -288,7 +288,7 @@ class SerializerCodegenImpl(
             anew(serializableAsmType)
             dup()
             val constructorDesc = if (serializableDescriptor.isDefaultSerializable)
-                buildInteralConstructorDesc(propsStartVar, bitMaskBase)
+                buildInteralConstructorDesc(propsStartVar, bitMaskBase, codegen, properties.serializableProperties)
             else buildExternalConstructorDesc(propsStartVar, bitMaskBase)
             invokespecial(serializableAsmType.internalName, "<init>", constructorDesc, false)
             if (!serializableDescriptor.isDefaultSerializable && !properties.serializableStandaloneProperties.isEmpty()) {
@@ -304,21 +304,6 @@ class SerializerCodegenImpl(
             // return
             areturn(serializableAsmType)
         }
-    }
-
-    private fun InstructionAdapter.buildInteralConstructorDesc(propsStartVar: Int, bitMaskBase: Int): String {
-        val constructorDesc = StringBuilder("(I")
-        load(bitMaskBase, OPT_MASK_TYPE)
-        var propVar = propsStartVar
-        for (property in properties.serializableProperties) {
-            val propertyType = codegen.typeMapper.mapType(property.type)
-            constructorDesc.append(propertyType.descriptor)
-            load(propVar, propertyType)
-            propVar += propertyType.size
-        }
-        constructorDesc.append("Lkotlin/serialization/SerializationConstructorMarker;)V")
-        aconst(null)
-        return constructorDesc.toString()
     }
 
     private fun InstructionAdapter.buildExternalConstructorDesc(propsStartVar: Int, bitMaskBase: Int): String {

@@ -23,12 +23,14 @@ import org.jetbrains.kotlin.descriptors.ClassConstructorDescriptor
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
 import org.jetbrains.kotlin.kserialization.backend.common.SerializableCodegen
+import org.jetbrains.kotlin.kserialization.resolve.SerializableProperties
 import org.jetbrains.kotlin.kserialization.resolve.SerializableProperty
 import org.jetbrains.kotlin.kserialization.resolve.isDefaultSerializable
 import org.jetbrains.kotlin.psi.KtAnonymousInitializer
 import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.resolve.BindingContext
+import org.jetbrains.kotlin.resolve.descriptorUtil.getSuperClassOrAny
 import org.jetbrains.org.objectweb.asm.Label
 import org.jetbrains.org.objectweb.asm.Type
 import org.jetbrains.org.objectweb.asm.commons.InstructionAdapter
@@ -72,19 +74,15 @@ class SerializableCodegenImpl(
     }
 
     private fun InstructionAdapter.doGenerateConstructorImpl(exprCodegen: ExpressionCodegen) {
-        load(0, thisAsmType)
-        invokespecial("java/lang/Object", "<init>", "()V", false)
-//        getstatic("java/lang/System", "out", "Ljava/io/PrintStream;")
-//        aconst("I'm a generated method")
-//        invokevirtual("java/io/PrintStream", "println", "(Ljava/lang/Object;)V", false)
-        classCodegen.myClass.declarations
         val seenMask = 1
-        var propVar = 2
-        for ((i, prop) in properties.serializableProperties.withIndex()) {
+//        var propOffset = 2
+        var (propIndex, propOffset) = generateSuperSerializableCall(2)
+        for (i in propIndex until properties.serializableProperties.size) {
+            val prop = properties[i]
             if (prop.transient) {
                 if (!needInitProperty(prop)) throw CompilationException("transient without default value", null, null)
                 exprCodegen.genInitProperty(prop)
-                propVar += prop.asmType.size
+                propOffset += prop.asmType.size
                 continue
             }
             val propType = prop.asmType
@@ -97,7 +95,7 @@ class SerializableCodegenImpl(
                 visitLabel(nonThrowLabel)
                 // setting field
                 load(0, thisAsmType)
-                load(propVar, propType)
+                load(propOffset, propType)
                 putfield(thisAsmType.internalName, prop.name, propType.descriptor)
             }
             else {
@@ -106,8 +104,9 @@ class SerializableCodegenImpl(
                 val nextLabel = Label()
                 ificmpeq(setLbl)
                 // setting field
+                // todo: validate nullability
                 load(0, thisAsmType)
-                load(propVar, propType)
+                load(propOffset, propType)
                 putfield(thisAsmType.internalName, prop.name, propType.descriptor)
                 goTo(nextLabel)
                 visitLabel(setLbl)
@@ -115,7 +114,7 @@ class SerializableCodegenImpl(
                 exprCodegen.genInitProperty(prop)
                 visitLabel(nextLabel)
             }
-            propVar += prop.asmType.size
+            propOffset += prop.asmType.size
         }
 
         // these properties required to be manually invoked, because they are not in serializableProperties
@@ -127,12 +126,34 @@ class SerializableCodegenImpl(
                 .forEach { t, u -> exprCodegen.genInitParam(t, u) }
 
         // init blocks
+        // todo: proper order with other initializers
         classCodegen.myClass.declarations
                 .asSequence()
                 .filterIsInstance<KtAnonymousInitializer>()
                 .mapNotNull { it.body }
                 .forEach { exprCodegen.gen(it, Type.VOID_TYPE) }
         areturn(Type.VOID_TYPE)
+    }
+
+    private fun InstructionAdapter.generateSuperSerializableCall(propStartVar: Int): Pair<Int, Int> {
+        val superClass = serializableDescriptor.getSuperClassOrAny()
+        val superType = classCodegen.typeMapper.mapType(superClass).internalName
+
+        load(0, thisAsmType)
+
+        if (!superClass.isDefaultSerializable) {
+            require(superClass.constructors.firstOrNull { it.valueParameters.isEmpty() } != null) { "Non-serializable parent of serializable class must have no arg constructor" }
+
+            // call
+            invokespecial(superType, "<init>", "()V", false)
+            return 0 to propStartVar
+        }
+        else {
+            val superProps = SerializableProperties(superClass, classCodegen.bindingContext).serializableProperties
+            val creator = buildInteralConstructorDesc(propStartVar, 1, classCodegen, superProps)
+            invokespecial(superType, "<init>", creator, false)
+            return superProps.size to propStartVar + superProps.sumBy { it.asmType.size }
+        }
     }
 
     private fun needInitProperty(prop: SerializableProperty) = getProp(prop)?.let { classCodegen.shouldInitializeProperty(it) }
