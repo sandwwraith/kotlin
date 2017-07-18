@@ -52,7 +52,7 @@ abstract class SerializerCodegen(declaration: KtPureClassOrObject, bindingContex
     protected abstract fun generateLoad(function: FunctionDescriptor)
 
     private fun generateSerializableClassPropertyIfNeeded() {
-        val property = getPropertyToGenerate(serializerDescriptor, KSerializerDescriptorResolver.SERIALIZABLE_CLASS,
+        val property = getPropertyToGenerate(serializerDescriptor, KSerializerDescriptorResolver.SERIAL_DESC_FIELD,
                                              serializerDescriptor::checkSerializableClassPropertyResult)
                        ?: return
         generateSerializableClassProperty(property)

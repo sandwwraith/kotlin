@@ -17,7 +17,7 @@
 package kotlin.serialization
 
 import kotlin.reflect.KClass
-import kotlin.reflect.companionObjectInstance
+import kotlin.reflect.full.companionObjectInstance
 import kotlin.serialization.internal.UnitClassDesc
 
 @Target(AnnotationTarget.PROPERTY, AnnotationTarget.CLASS)
@@ -39,10 +39,13 @@ annotation class SerialName(val value: String)
 annotation class Optional()
 
 @Target(AnnotationTarget.PROPERTY)
-annotation class Transient() // todo: not supported yet
+annotation class Transient()
 
-enum class KSerialClassKind {
-    CLASS, OBJECT, UNIT, SEALED, LIST, SET, MAP, ENTRY
+@Target(AnnotationTarget.ANNOTATION_CLASS)
+annotation class SerialInfo() // todo: not supported yet
+
+enum class KSerialClassKind { // unit and object unused?
+    CLASS, OBJECT, UNIT, SEALED, LIST, SET, MAP, ENTRY, POLYMORPHIC, PRIMITIVE, ENUM
 }
 
 interface KSerialClassDesc {
@@ -61,7 +64,7 @@ interface KSerialLoader<out T> {
 }
 
 interface KSerializer<T>: KSerialSaver<T>, KSerialLoader<T> {
-    val serializableClass: KClass<*>
+    val serialClassDesc: KSerialClassDesc
 }
 
 class SerializationConstructorMarker private constructor()

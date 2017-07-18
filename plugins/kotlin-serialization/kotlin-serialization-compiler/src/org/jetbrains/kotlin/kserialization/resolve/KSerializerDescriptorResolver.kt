@@ -32,11 +32,11 @@ import java.util.*
 
 object KSerializerDescriptorResolver {
 
-    val SERIALIZABLE_CLASS = "serializableClass"
+    val SERIAL_DESC_FIELD = "serialClassDesc"
     val SAVE = "save"
     val LOAD = "load"
 
-    val SERIALIZABLE_CLASS_NAME = Name.identifier("serializableClass")
+    val SERIAL_DESC_FIELD_NAME = Name.identifier(SERIAL_DESC_FIELD)
     val SAVE_NAME = Name.identifier(SAVE)
     val LOAD_NAME = Name.identifier(LOAD)
     val DUMMY_PARAM_NAME = Name.identifier("serializationConstructorMarker")
@@ -62,7 +62,7 @@ object KSerializerDescriptorResolver {
                                      result: MutableSet<PropertyDescriptor>) {
         val classDescriptor = getSerializableClassDescriptorBySerializer(thisDescriptor) ?: return
         // todo: check if it is already defined
-        if (name == SERIALIZABLE_CLASS_NAME)
+        if (name == SERIAL_DESC_FIELD_NAME)
             result.add(createSerializableClassPropertyDescriptor(thisDescriptor, classDescriptor))
 
     }
@@ -91,7 +91,7 @@ object KSerializerDescriptorResolver {
     }
 
     fun createSerializableClassPropertyDescriptor(companionDescriptor: ClassDescriptor, classDescriptor: ClassDescriptor): PropertyDescriptor =
-            doCreateSerializerProperty(companionDescriptor, classDescriptor, SERIALIZABLE_CLASS_NAME)
+            doCreateSerializerProperty(companionDescriptor, classDescriptor, SERIAL_DESC_FIELD_NAME)
 
     fun createSaveFunctionDescriptor(companionDescriptor: ClassDescriptor, classDescriptor: ClassDescriptor): SimpleFunctionDescriptor =
             doCreateSerializerFunction(companionDescriptor, classDescriptor, SAVE_NAME)

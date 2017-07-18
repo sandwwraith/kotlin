@@ -18,7 +18,6 @@ package kotlin.serialization
 
 import java.io.*
 import kotlin.reflect.KClass
-import kotlin.reflect.full.isSubclassOf
 
 data class JSON(
         private val unquoted: Boolean = false,
@@ -161,10 +160,11 @@ data class JSON(
 
         private fun switchMode(mode: Mode, desc: KSerialClassDesc, typeParams: Array<out KSerializer<*>>): Mode =
                 when (desc.kind) {
+                    KSerialClassKind.POLYMORPHIC -> Mode.POLY
                     KSerialClassKind.LIST, KSerialClassKind.SET -> Mode.LIST
                     KSerialClassKind.MAP -> {
-                        val keyClass = typeParams[0].serializableClass
-                        if (PRIMITIVE_CLASSES.contains(keyClass) || keyClass.isSubclassOf(Enum::class))
+                        val keyKind = typeParams[0].serialClassDesc.kind
+                        if (keyKind == KSerialClassKind.PRIMITIVE || keyKind == KSerialClassKind.ENUM)
                             Mode.MAP else Mode.LIST
                     }
                     KSerialClassKind.ENTRY -> if (mode == Mode.MAP) Mode.ENTRY else Mode.OBJ
@@ -186,6 +186,7 @@ data class JSON(
         OBJ(BEGIN_OBJ, END_OBJ),
         LIST(BEGIN_LIST, END_LIST),
         MAP(BEGIN_OBJ, END_OBJ),
+        POLY(BEGIN_LIST, END_LIST),
         ENTRY(INVALID, INVALID);
 
         val beginTc: Byte = c2tc(begin.toInt())
@@ -220,11 +221,11 @@ data class JSON(
                         w.print(COMMA)
                     w.nextItem()
                 }
-                Mode.ENTRY -> {
+                Mode.ENTRY, Mode.POLY -> {
                     if (index == 0)
                         forceStr = true
                     if (index == 1) {
-                        w.print(COLON)
+                        w.print(if (mode == Mode.ENTRY) COLON else COMMA)
                         w.space()
                         forceStr = false
                     }
@@ -324,11 +325,11 @@ data class JSON(
         override fun readBegin(desc: KSerialClassDesc, vararg typeParams: KSerializer<*>): KInput {
             val newMode = switchMode(mode, desc, typeParams)
             if (newMode.begin != INVALID) {
-                require(p.curTc == newMode.beginTc, p.tokenPos) { "Expected '${newMode.begin}'" }
+                require(p.curTc == newMode.beginTc, p.tokenPos) { "Expected '${newMode.begin}, kind: ${desc.kind}'" }
                 p.nextToken()
             }
             return when (newMode) {
-                Mode.LIST, Mode.MAP -> JsonInput(newMode, p) // need fresh cur index
+                Mode.LIST, Mode.MAP, Mode.POLY -> JsonInput(newMode, p) // need fresh cur index
                 else -> if (mode == newMode) this else
                     JsonInput(newMode, p) // todo: reuse instance per mode
             }
@@ -352,12 +353,25 @@ data class JSON(
         }
 
         override fun readElement(desc: KSerialClassDesc): Int {
+//            println(p.state())
             if (p.curTc == TC_COMMA) p.nextToken()
             when (mode) {
                 Mode.LIST, Mode.MAP -> {
                     if (!p.canBeginValue)
                         return READ_DONE
                     return ++curIndex
+                }
+                Mode.POLY -> {
+                    when (entryIndex++) {
+                        0 -> return 0
+                        1 -> {
+                            return 1
+                        }
+                        else -> {
+                            entryIndex = 0
+                            return READ_DONE
+                        }
+                    }
                 }
                 Mode.ENTRY -> {
                     when (entryIndex++) {
@@ -505,6 +519,10 @@ data class JSON(
                 in 'A'..'F' -> return curChar - 'A'.toInt() + 10
                 else -> throw fail(charPos, "Invalid hex char '${curChar.toChar()}' in unicode escape")
             }
+        }
+
+        internal fun state(): String {
+            return "Parser(charPos=$charPos, curChar=$curChar, tokenPos=$tokenPos, curTc=$curTc, curStr=$curStr)"
         }
     }
 }

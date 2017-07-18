@@ -16,7 +16,10 @@
 
 package org.jetbrains.kotlin.kserialization.backend.jvm
 
-import org.jetbrains.kotlin.codegen.*
+import org.jetbrains.kotlin.codegen.CompilationException
+import org.jetbrains.kotlin.codegen.ExpressionCodegen
+import org.jetbrains.kotlin.codegen.ImplementationBodyCodegen
+import org.jetbrains.kotlin.codegen.StackValue
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
@@ -24,7 +27,6 @@ import org.jetbrains.kotlin.kserialization.backend.common.SerializerCodegen
 import org.jetbrains.kotlin.kserialization.resolve.KSerializerDescriptorResolver
 import org.jetbrains.kotlin.kserialization.resolve.getSerializableClassDescriptorBySerializer
 import org.jetbrains.kotlin.kserialization.resolve.isInternalSerializable
-import org.jetbrains.kotlin.resolve.jvm.AsmTypes
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.OtherOrigin
 import org.jetbrains.org.objectweb.asm.Label
 import org.jetbrains.org.objectweb.asm.Opcodes.*
@@ -77,11 +79,9 @@ class SerializerCodegenImpl(
     }
 
     override fun generateSerializableClassProperty(property: PropertyDescriptor) {
-        // todo: store it into static field?
         codegen.generateMethod(property.getter!!) { signature, expressionCodegen ->
-            aconst(serializableAsmType)
-            AsmUtil.wrapJavaClassIntoKClass(this)
-            areturn(AsmTypes.K_CLASS_TYPE)
+            getstatic(serializerAsmType.internalName, serialDescField, descType.descriptor)
+            areturn(descType)
         }
     }
 

@@ -18,7 +18,6 @@ package kotlin.serialization.internal
 
 import java.util.*
 import kotlin.collections.LinkedHashMap
-import kotlin.reflect.KClass
 import kotlin.serialization.*
 import kotlin.serialization.KInput.Companion.READ_ALL
 import kotlin.serialization.KInput.Companion.READ_DONE
@@ -28,7 +27,7 @@ const val SIZE_INDEX = 0
 // ============================= serializers =============================
 
 sealed class ListLikeSerializer<E,C,B>(private val eSerializer: KSerializer<E>) : KSerializer<C> {
-    abstract val serialClassDesc: ListLikeDesc
+    override abstract val serialClassDesc: ListLikeDesc
 
     abstract fun C.objSize(): Int
     abstract fun C.objIterator(): Iterator<E>
@@ -102,7 +101,7 @@ sealed class ListLikeSerializer<E,C,B>(private val eSerializer: KSerializer<E>) 
 class ReferenceArraySerializer<E>(private val eClass: java.lang.Class<E>, eSerializer: KSerializer<E>) :
         ListLikeSerializer<E,Array<E>,ArrayList<E>>(eSerializer) {
     override val serialClassDesc = ArrayClassDesc
-    override val serializableClass: KClass<*> = Array<Any>::class
+//    override val serializableClass: KClass<*> = Array<Any>::class
 
     override fun Array<E>.objSize(): Int = size
     override fun Array<E>.objIterator(): Iterator<E> = iterator()
@@ -116,7 +115,7 @@ class ReferenceArraySerializer<E>(private val eClass: java.lang.Class<E>, eSeria
 
 class ArrayListSerializer<E>(element: KSerializer<E>) : ListLikeSerializer<E,Collection<E>,ArrayList<E>>(element) {
     override val serialClassDesc = ArrayListClassDesc
-    override val serializableClass: KClass<*> = Collection::class
+//    override val serializableClass: KClass<*> = Collection::class
 
     override fun Collection<E>.objSize(): Int = size
     override fun Collection<E>.objIterator(): Iterator<E> = iterator()
@@ -129,7 +128,7 @@ class ArrayListSerializer<E>(element: KSerializer<E>) : ListLikeSerializer<E,Col
 
 class LinkedHashSetSerializer<E>(eSerializer: KSerializer<E>) : ListLikeSerializer<E,Set<E>,LinkedHashSet<E>>(eSerializer) {
     override val serialClassDesc = LinkedHashSetClassDesc
-    override val serializableClass: KClass<*> = Set::class
+//    override val serializableClass: KClass<*> = Set::class
 
     override fun Set<E>.objSize(): Int = size
     override fun Set<E>.objIterator(): Iterator<E> = iterator()
@@ -142,7 +141,7 @@ class LinkedHashSetSerializer<E>(eSerializer: KSerializer<E>) : ListLikeSerializ
 
 class HashSetSerializer<E>(eSerializer: KSerializer<E>) : ListLikeSerializer<E,Set<E>,HashSet<E>>(eSerializer) {
     override val serialClassDesc = HashSetClassDesc
-    override val serializableClass: KClass<*> = HashSet::class
+//    override val serializableClass: KClass<*> = HashSet::class
 
     override fun Set<E>.objSize(): Int = size
     override fun Set<E>.objIterator(): Iterator<E> = iterator()
@@ -156,7 +155,7 @@ class HashSetSerializer<E>(eSerializer: KSerializer<E>) : ListLikeSerializer<E,S
 class LinkedHashMapSerializer<K,V>(kSerializer: KSerializer<K>, vSerializer: KSerializer<V>) :
         ListLikeSerializer<Map.Entry<K, V>, Map<K, V>, LinkedHashMap<K, V>>(MapEntrySerializer<K,V>(kSerializer, vSerializer)) {
     override val serialClassDesc = LinkedHashMapClassDesc
-    override val serializableClass: KClass<*> = LinkedHashMap::class
+    //    override val serializableClass: KClass<*> = LinkedHashMap::class
     override val typeParams: Array<KSerializer<*>> = arrayOf(kSerializer, vSerializer)
 
     override fun Map<K, V>.objSize(): Int = size
@@ -171,7 +170,7 @@ class LinkedHashMapSerializer<K,V>(kSerializer: KSerializer<K>, vSerializer: KSe
 class HashMapSerializer<K,V>(kSerializer: KSerializer<K>, vSerializer: KSerializer<V>) :
         ListLikeSerializer<Map.Entry<K, V>, Map<K, V>, HashMap<K, V>>(MapEntrySerializer<K,V>(kSerializer, vSerializer)) {
     override val serialClassDesc: ListLikeDesc = HashMapClassDesc
-    override val serializableClass: KClass<*> = HashMap::class
+    //    override val serializableClass: KClass<*> = HashMap::class
     override val typeParams: Array<KSerializer<*>> = arrayOf(kSerializer, vSerializer)
 
     override fun Map<K, V>.objSize(): Int = size
@@ -188,7 +187,8 @@ const val VALUE_INDEX = 1
 
 class MapEntrySerializer<K, V>(private val kSerializer: KSerializer<K>, private val vSerializer: KSerializer<V>) :
         KSerializer<Map.Entry<K, V>> {
-    override val serializableClass: KClass<*> = Map.Entry::class
+    override val serialClassDesc = MapEntryClassDesc//To change initializer of created properties use File | Settings | File Templates.
+//    override val serializableClass: KClass<*> = Map.Entry::class
 
     override fun save(output: KOutput, obj: Map.Entry<K, V>) {
         @Suppress("NAME_SHADOWING")
@@ -260,33 +260,33 @@ object ArrayClassDesc : ListLikeDesc() {
 }
 
 object ArrayListClassDesc : ListLikeDesc() {
-    override val name: String get() = "kotlin.collections.ArrayList"
+    override val name: String get() = "java.util.ArrayList"
     override val kind: KSerialClassKind get() = KSerialClassKind.LIST
 }
 
 object LinkedHashSetClassDesc : ListLikeDesc() {
-    override val name: String get() = "kotlin.collections.LinkedHashSet"
+    override val name: String get() = "java.util.LinkedHashSet"
     override val kind: KSerialClassKind get() = KSerialClassKind.SET
 }
 
 object HashSetClassDesc : ListLikeDesc() {
-    override val name: String get() = "kotlin.collections.HashSet"
+    override val name: String get() = "java.util.HashSet"
     override val kind: KSerialClassKind get() = KSerialClassKind.SET
 }
 
 object LinkedHashMapClassDesc : ListLikeDesc() {
-    override val name: String get() = "kotlin.collections.LinkedHashMap"
+    override val name: String get() = "java.util.LinkedHashMap"
     override val kind: KSerialClassKind get() = KSerialClassKind.MAP
 }
 
 object HashMapClassDesc : ListLikeDesc() {
-    override val name: String get() = "kotlin.collections.HashMap"
+    override val name: String get() = "java.util.HashMap"
     override val kind: KSerialClassKind get() = KSerialClassKind.MAP
 }
 
 data class MapEntry<K, V>(override val key: K, override val value: V) : Map.Entry<K, V>
 
-object MapEntryClassDesc : SerialClassDescImpl("kotlin.collections.MapEntry") {
+object MapEntryClassDesc : SerialClassDescImpl("java.util.Map\$Entry") {
     override val kind: KSerialClassKind = KSerialClassKind.ENTRY
 
     init {

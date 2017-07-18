@@ -103,6 +103,8 @@ internal val serialTransientFqName = FqName("kotlin.serialization.Transient")
 val Annotations.serialTransient: Boolean
     get() = hasAnnotation(serialTransientFqName)
 
+internal val serialInfoFqName = FqName("kotlin.serialization.SerialInfo")
+
 // ----------------------------------------
 
 val KotlinType?.toClassDescriptor: ClassDescriptor?
@@ -127,7 +129,7 @@ internal val ClassDescriptor?.classSerializer: KotlinType?
 val KotlinType?.typeSerializer: KotlinType?
     get() = this?.let {
         // serializer annotation on this type or from a class
-        return it.annotations.serializableWith ?: (it.constructor.declarationDescriptor as? ClassDescriptor).classSerializer
+        return it.annotations.serializableWith ?: (it.toClassDescriptor).classSerializer
     }
 
 // serializer that was declared specifically for this property via its own annotation or via annotation on its type
