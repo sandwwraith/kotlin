@@ -53,6 +53,8 @@ interface KSerialClassDesc {
     val kind: KSerialClassKind
     fun getElementName(index: Int): String
     fun getElementIndex(name: String): Int
+
+    fun getAnnotationsForIndex(index: Int): List<Annotation> = emptyList()
 }
 
 interface KSerialSaver<in T> {

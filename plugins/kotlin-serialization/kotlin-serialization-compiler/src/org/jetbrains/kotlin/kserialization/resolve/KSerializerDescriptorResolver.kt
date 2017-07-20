@@ -22,8 +22,12 @@ import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.descriptors.impl.*
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.psi.synthetics.SyntheticClassOrObjectDescriptor
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
+import org.jetbrains.kotlin.resolve.lazy.LazyClassContext
+import org.jetbrains.kotlin.resolve.lazy.declarations.ClassMemberDeclarationProvider
+import org.jetbrains.kotlin.resolve.lazy.descriptors.LazyClassDescriptor
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.Variance
 import org.jetbrains.kotlin.types.typeUtil.createProjection
@@ -41,6 +45,7 @@ object KSerializerDescriptorResolver {
     val LOAD_NAME = Name.identifier(LOAD)
     val DUMMY_PARAM_NAME = Name.identifier("serializationConstructorMarker")
     val WRITE_SELF_NAME = Name.identifier("write\$Self") //todo: add it as a supertype to synthetic resolving
+    val IMPL_NAME = Name.identifier("Impl")
 
 
     fun addSerializableSupertypes(classDescriptor: ClassDescriptor, supertypes: MutableList<KotlinType>) {
@@ -49,11 +54,38 @@ object KSerializerDescriptorResolver {
         }
     }
 
+    fun isSerialInfoImpl(thisDescriptor: ClassDescriptor): Boolean {
+        return thisDescriptor.name == IMPL_NAME
+               && thisDescriptor.containingDeclaration is LazyClassDescriptor
+               && thisDescriptor.containingDeclaration.annotations.hasAnnotation(serialInfoFqName)
+    }
+
+    fun addSerialInfoSuperType(thisDescriptor: ClassDescriptor, supertypes: MutableList<KotlinType>) {
+        if (isSerialInfoImpl(thisDescriptor)) {
+            supertypes.add((thisDescriptor.containingDeclaration as LazyClassDescriptor).toSimpleType(false))
+        }
+    }
+
     fun addSerializerSupertypes(classDescriptor: ClassDescriptor, supertypes: MutableList<KotlinType>) {
         val serializableClassDescriptor = getSerializableClassDescriptorBySerializer(classDescriptor) ?: return
         if (supertypes.none(::isKSerializer)) {
             supertypes.add(classDescriptor.getKSerializerType(serializableClassDescriptor.defaultType))
         }
+    }
+
+    fun addSerialInfoImplClass(interfaceDesc: ClassDescriptor, declarationProvider: ClassMemberDeclarationProvider, ctx: LazyClassContext): ClassDescriptor {
+        val interfaceDecl = declarationProvider.correspondingClassOrObject!!
+        val scope = ctx.declarationScopeProvider.getResolutionScopeForDeclaration(declarationProvider.ownerInfo!!.scopeAnchor);
+        return SyntheticClassOrObjectDescriptor(ctx,
+                                                interfaceDecl,
+                                                interfaceDesc,
+                                                IMPL_NAME,
+                                                interfaceDesc.source,
+                                                scope,
+                                                Modality.FINAL,
+                                                Visibilities.PUBLIC,
+                                                ClassKind.CLASS,
+                                                false)
     }
 
     fun generateSerializerProperties(thisDescriptor: ClassDescriptor,
@@ -243,5 +275,11 @@ object KSerializerDescriptorResolver {
         )
 
         return f
+    }
+
+    fun generateDescriptorsForAnnotationImpl(thisDescriptor: ClassDescriptor, name: Name, fromSupertypes: List<PropertyDescriptor>, result: MutableCollection<PropertyDescriptor>) {
+        if (isSerialInfoImpl(thisDescriptor)) {
+            result.add(fromSupertypes[0].copy(thisDescriptor, Modality.FINAL, Visibilities.PUBLIC, CallableMemberDescriptor.Kind.SYNTHESIZED, true) as PropertyDescriptor)
+        }
     }
 }

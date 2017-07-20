@@ -21,18 +21,35 @@ import org.jetbrains.kotlin.descriptors.PropertyDescriptor
 import org.jetbrains.kotlin.descriptors.SimpleFunctionDescriptor
 import org.jetbrains.kotlin.kserialization.resolve.KSerializerDescriptorResolver
 import org.jetbrains.kotlin.kserialization.resolve.isInternalSerializable
+import org.jetbrains.kotlin.kserialization.resolve.serialInfoFqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.name.SpecialNames
 import org.jetbrains.kotlin.resolve.extensions.SyntheticResolveExtension
+import org.jetbrains.kotlin.resolve.lazy.LazyClassContext
+import org.jetbrains.kotlin.resolve.lazy.declarations.ClassMemberDeclarationProvider
 import org.jetbrains.kotlin.types.KotlinType
 import java.util.*
 
 class SerializationResolveExtension : SyntheticResolveExtension {
+    override fun contributeAdditionalNames(thisDescriptor: ClassDescriptor): List<Name> {
+        if (thisDescriptor.annotations.hasAnnotation(serialInfoFqName))
+            return listOf(KSerializerDescriptorResolver.IMPL_NAME)
+        else
+            return listOf()
+    }
+
+    override fun addNonDeclaredClasses(thisDescriptor: ClassDescriptor, declarationProvider: ClassMemberDeclarationProvider, ctx: LazyClassContext, name: Name, result: MutableSet<ClassDescriptor>) {
+        if (thisDescriptor.annotations.hasAnnotation(serialInfoFqName) && name == KSerializerDescriptorResolver.IMPL_NAME)
+            result.add(KSerializerDescriptorResolver.addSerialInfoImplClass(thisDescriptor, declarationProvider, ctx))
+        return
+    }
+
     override fun getSyntheticCompanionObjectNameIfNeeded(thisDescriptor: ClassDescriptor): Name? =
             if (thisDescriptor.isInternalSerializable) SpecialNames.DEFAULT_NAME_FOR_COMPANION_OBJECT
             else null
 
     override fun addSyntheticSupertypes(thisDescriptor: ClassDescriptor, supertypes: MutableList<KotlinType>) {
+        KSerializerDescriptorResolver.addSerialInfoSuperType(thisDescriptor, supertypes)
         KSerializerDescriptorResolver.addSerializableSupertypes(thisDescriptor, supertypes)
         KSerializerDescriptorResolver.addSerializerSupertypes(thisDescriptor, supertypes)
     }
@@ -42,6 +59,7 @@ class SerializationResolveExtension : SyntheticResolveExtension {
     }
 
     override fun generateSyntheticProperties(thisDescriptor: ClassDescriptor, name: Name, fromSupertypes: ArrayList<PropertyDescriptor>, result: MutableSet<PropertyDescriptor>) {
+        KSerializerDescriptorResolver.generateDescriptorsForAnnotationImpl(thisDescriptor, name, fromSupertypes, result)
         KSerializerDescriptorResolver.generateSerializerProperties(thisDescriptor, fromSupertypes, name, result)
     }
 }

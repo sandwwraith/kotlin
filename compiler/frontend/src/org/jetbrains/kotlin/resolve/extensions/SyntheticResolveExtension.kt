@@ -22,6 +22,8 @@ import org.jetbrains.kotlin.descriptors.PropertyDescriptor
 import org.jetbrains.kotlin.descriptors.SimpleFunctionDescriptor
 import org.jetbrains.kotlin.extensions.ProjectExtensionDescriptor
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.resolve.lazy.LazyClassContext
+import org.jetbrains.kotlin.resolve.lazy.declarations.ClassMemberDeclarationProvider
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.utils.addToStdlib.firstNotNullResult
 import java.util.*
@@ -37,6 +39,14 @@ interface SyntheticResolveExtension {
             if (instances.size == 1) return instances.single()
             // return list combiner here
             return object : SyntheticResolveExtension {
+                override fun contributeAdditionalNames(thisDescriptor: ClassDescriptor): List<Name> {
+                    return instances.flatMap { it.contributeAdditionalNames(thisDescriptor) }
+                }
+
+                override fun addNonDeclaredClasses(thisDescriptor: ClassDescriptor, declarationProvider: ClassMemberDeclarationProvider, ctx: LazyClassContext, name: Name, result: MutableSet<ClassDescriptor>) {
+                    instances.forEach { it.addNonDeclaredClasses(thisDescriptor, declarationProvider, ctx, name, result) }
+                }
+
                 override fun getSyntheticCompanionObjectNameIfNeeded(thisDescriptor: ClassDescriptor): Name? =
                     instances.firstNotNullResult { it.getSyntheticCompanionObjectNameIfNeeded(thisDescriptor) }
 
@@ -55,6 +65,10 @@ interface SyntheticResolveExtension {
             }
         }
     }
+
+    fun contributeAdditionalNames(thisDescriptor: ClassDescriptor): List<Name>
+
+    fun addNonDeclaredClasses(thisDescriptor: ClassDescriptor, declarationProvider: ClassMemberDeclarationProvider, ctx: LazyClassContext, name: Name, result: MutableSet<ClassDescriptor>)
 
     fun getSyntheticCompanionObjectNameIfNeeded(thisDescriptor: ClassDescriptor): Name?
 

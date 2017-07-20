@@ -26,5 +26,7 @@ class SerializableProperty(val descriptor: PropertyDescriptor, val isConstructor
     val serializer = descriptor.propertySerializer
     val optional = descriptor.annotations.serialOptional
     val transient = descriptor.annotations.serialTransient
-    val annotations = descriptor.annotations.filter { it.type.annotations.hasAnnotation(serialInfoFqName) }
+    val annotations = descriptor.annotations
+            .mapNotNull { it.type.toClassDescriptor }
+            .filter { it.annotations.hasAnnotation(serialInfoFqName) }
 }

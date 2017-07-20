@@ -27,7 +27,10 @@ import org.jetbrains.kotlin.kserialization.backend.common.SerializerCodegen
 import org.jetbrains.kotlin.kserialization.resolve.KSerializerDescriptorResolver
 import org.jetbrains.kotlin.kserialization.resolve.getSerializableClassDescriptorBySerializer
 import org.jetbrains.kotlin.kserialization.resolve.isInternalSerializable
+import org.jetbrains.kotlin.psi.ValueArgument
+import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.OtherOrigin
+import org.jetbrains.kotlin.resolve.lazy.descriptors.LazyAnnotationDescriptor
 import org.jetbrains.org.objectweb.asm.Label
 import org.jetbrains.org.objectweb.asm.Opcodes.*
 import org.jetbrains.org.objectweb.asm.Type
@@ -55,7 +58,8 @@ class SerializerCodegenImpl(
         codegen.v.newField(OtherOrigin(codegen.myClass), ACC_PRIVATE or ACC_STATIC or ACC_FINAL or ACC_SYNTHETIC,
                            serialDescField, descType.descriptor, null, null)
         // todo: lazy initialization of $$serialDesc that is performed only when save/load is invoked first time
-        with(codegen.createOrGetClInitCodegen().v) {
+        val expr = codegen.createOrGetClInitCodegen()
+        with(expr.v) {
             val classDescVar = 0
             anew(descImplType)
             dup()
@@ -67,6 +71,29 @@ class SerializerCodegenImpl(
                 load(classDescVar, descImplType)
                 aconst(property.name)
                 invokevirtual(descImplType.internalName, "addElement", "(Ljava/lang/String;)V", false)
+                // pushing annotations
+                for (annotationClass in property.annotations) {
+                    load(classDescVar, descImplType)
+                    val implType = codegen.typeMapper.mapType(annotationClass).internalName + "\$" + KSerializerDescriptorResolver.IMPL_NAME.identifier
+                    // new Annotation$Impl(...)
+                    anew(Type.getObjectType(implType))
+                    dup()
+                    val sb = StringBuilder("(")
+                    val args: List<ValueArgument> = (property.descriptor.annotations.findAnnotation(annotationClass.fqNameSafe) as? LazyAnnotationDescriptor)?.annotationEntry?.valueArguments.orEmpty()
+                    val consParams = annotationClass.unsubstitutedPrimaryConstructor?.valueParameters.orEmpty()
+                    if (args.size != consParams.size) throw IllegalArgumentException("Can't use arguments with defaults for serializable annotations yet")
+                    for (i in consParams.indices) {
+                        val decl = args[i]
+                        val desc = consParams[i]
+                        val valAsmType = codegen.typeMapper.mapType(desc.type)
+                        expr.gen(decl.getArgumentExpression(), valAsmType)
+                        sb.append(valAsmType.descriptor)
+                    }
+                    sb.append(")V")
+                    invokespecial(implType, "<init>", sb.toString(), false)
+                    // serialDesc.pushAnnotation(..)
+                    invokevirtual(descImplType.internalName, "pushAnnotation", "(Ljava/lang/annotation/Annotation;)V", false)
+                }
             }
             load(classDescVar, descImplType)
             putstatic(serializerAsmType.internalName, serialDescField, descType.descriptor)

@@ -25,12 +25,20 @@ open class SerialClassDescImpl(override val name: String) : KSerialClassDesc {
     override val kind: KSerialClassKind get() = KSerialClassKind.CLASS
 
     private val names: MutableList<String> = ArrayList()
+    private val annotations: MutableList<MutableList<Annotation>> = mutableListOf()
     private var _indices: Map<String, Int>? = null
     private val indices: Map<String, Int> get() = _indices ?: buildIndices()
 
     fun addElement(name: String) {
         names.add(name)
+        annotations.add(mutableListOf())
     }
+
+    fun pushAnnotation(a: Annotation) {
+        annotations.last().add(a)
+    }
+
+    override fun getAnnotationsForIndex(index: Int) = annotations[index].toList()
 
     override fun getElementName(index: Int): String = names[index]
     override fun getElementIndex(name: String): Int = indices[name] ?: throw SerializationException("Unknown name '$name'")
