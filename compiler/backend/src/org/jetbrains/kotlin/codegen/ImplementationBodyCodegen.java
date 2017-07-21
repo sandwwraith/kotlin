@@ -465,9 +465,17 @@ public class ImplementationBodyCodegen extends ClassBodyCodegen {
             return type;
         }
         else {
+            PropertyDescriptor accessDescriptor = context.accessibleDescriptor(propertyDescriptor, null);
             //noinspection ConstantConditions
-            Method method = typeMapper.mapAsmMethod(propertyDescriptor.getGetter());
-            iv.invokevirtual(classAsmType.getInternalName(), method.getName(), method.getDescriptor(), false);
+            Method method = typeMapper.mapAsmMethod(accessDescriptor.getGetter());
+            if (!propertyDescriptor.equals(accessDescriptor)) {
+                // using synthetic static accessor
+                iv.invokestatic(classAsmType.getInternalName(), method.getName(), method.getDescriptor(), false);
+            }
+            else {
+                // default accessor
+                iv.invokevirtual(classAsmType.getInternalName(), method.getName(), method.getDescriptor(), false);
+            }
             return method.getReturnType();
         }
     }
