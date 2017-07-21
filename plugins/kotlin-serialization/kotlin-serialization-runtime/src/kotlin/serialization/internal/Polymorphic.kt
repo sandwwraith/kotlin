@@ -35,13 +35,14 @@ object PolymorphicClassDesc : SerialClassDescImpl("kotlin.Any") {
     }
 }
 
-object RealDynamicSerializer : KSerializer<Any> {
+object PolymorphicSerializer : KSerializer<Any> {
 
     override val serialClassDesc: KSerialClassDesc
         get() = PolymorphicClassDesc
 
     override fun save(output: KOutput, obj: Any) {
         val saver = resolveSaver(obj)
+        @Suppress("NAME_SHADOWING")
         val output = output.writeBegin(serialClassDesc)
         output.writeStringElementValue(serialClassDesc, 0, saver.serialClassDesc.name)
         output.writeSerializableElementValue(serialClassDesc, 1, saver, obj)
@@ -49,6 +50,7 @@ object RealDynamicSerializer : KSerializer<Any> {
     }
 
     override fun load(input: KInput): Any {
+        @Suppress("NAME_SHADOWING")
         val input = input.readBegin(serialClassDesc)
         var klassName: String? = null
         var value: Any? = null
@@ -81,58 +83,48 @@ object RealDynamicSerializer : KSerializer<Any> {
 }
 
 
-// can change later
-internal typealias DynamicSerializer = RealDynamicSerializer
-
-//todo : Short::class and others
-//todo : Hardcoded class names for kotlin.collections... because they cannot be found by Class.forName
-internal object SerialCache {
-
-
-    val map: Map<KClass<*>, KSerializer<*>> = mapOf(
-            Unit::class to UnitSerializer,
-            Boolean::class to BooleanSerializer,
-            Int::class to IntSerializer,
-            Long::class to LongSerializer,
-            Double::class to DoubleSerializer,
-            Char::class to CharSerializer,
-            String::class to StringSerializer,
-            Collection::class to ArrayListSerializer(makeNullable(DynamicSerializer)),
-            List::class to ArrayListSerializer(makeNullable(DynamicSerializer)),
-            HashSet::class to HashSetSerializer(makeNullable(DynamicSerializer)),
-            Set::class to LinkedHashSetSerializer(makeNullable(DynamicSerializer)),
-            HashMap::class to HashMapSerializer(makeNullable(DynamicSerializer), makeNullable(DynamicSerializer)),
-            Map::class to LinkedHashMapSerializer(makeNullable(DynamicSerializer), makeNullable(DynamicSerializer)),
-            Map.Entry::class to MapEntrySerializer(makeNullable(DynamicSerializer), makeNullable(DynamicSerializer))
+internal object ClassSerialCache {
+    internal val map: Map<KClass<*>, KSerializer<*>> = mapOf(
+            // not sure if we need collection serializer at all
+//            Collection::class to ArrayListSerializer(makeNullable(PolymorphicSerializer)),
+            List::class to ArrayListSerializer(makeNullable(PolymorphicSerializer)),
+            HashSet::class to HashSetSerializer(makeNullable(PolymorphicSerializer)),
+            Set::class to LinkedHashSetSerializer(makeNullable(PolymorphicSerializer)),
+            HashMap::class to HashMapSerializer(makeNullable(PolymorphicSerializer), makeNullable(PolymorphicSerializer)),
+            Map::class to LinkedHashMapSerializer(makeNullable(PolymorphicSerializer), makeNullable(PolymorphicSerializer)),
+            Map.Entry::class to MapEntrySerializer(makeNullable(PolymorphicSerializer), makeNullable(PolymorphicSerializer))
     )
 
     @Suppress("UNCHECKED_CAST")
-    fun <E> getBuiltInSerializer(klass: KClass<*>): KSerializer<E>? {
+    internal fun getSubclassSerializer(klass: KClass<*>): KSerializer<*>? {
+        if (klass.java.isArray) return ReferenceArraySerializer(Any::class.java, PolymorphicSerializer)
         for ((k, v) in map) {
-            if (klass.isSubclassOf(k)) return v as KSerializer<E>
+            if (klass.isSubclassOf(k)) return v
         }
         return null
     }
+}
+
+internal object SerialCache {
+    internal val map: MutableMap<String, KSerializer<*>> = HashMap()
+
+    init {
+        allPrimitives.forEach { registerSerializer(it.serialClassDesc.name, it) }
+        ClassSerialCache.map.values.toList().forEach { registerSerializer(it.serialClassDesc.name, it) }
+        registerSerializer("kotlin.Array", ReferenceArraySerializer(Any::class.java, PolymorphicSerializer))
+    }
 
     @Suppress("UNCHECKED_CAST")
-    fun <E> lookupSerializer(klass: KClass<*>): KSerializer<E> {
-
-        var saver = klass.let { SerialCache.getBuiltInSerializer<E>(it) }
-
-        if (saver == null) {
-            //check for built-in types
-            saver = (klass.companionObjectInstance) as? KSerializer<E>
-        }
-        return requireNotNull(saver) { "Can't found internal serializer for class $klass" }
+    internal fun <E> lookupSerializer(className: String, preloadedClass: KClass<*>? = null): KSerializer<E> {
+        // First, look in the map
+        var ans = map[className]
+        if (ans != null) return ans as KSerializer<E>
+        // If it's not there, maybe it came from java
+        val klass = preloadedClass ?: Class.forName(className).kotlin
+        ans = ClassSerialCache.getSubclassSerializer(klass)
+        if (ans != null) return ans as KSerializer<E>
+        // Then, it's user defined class
+        val last = klass.companionObjectInstance as? KSerializer<E>
+        return requireNotNull(last) { "Can't found internal serializer for class $klass" }
     }
-}
-
-fun <E> resolveSaver(value: E): KSerializer<E> {
-    val klass = (value as? Any)?.javaClass?.kotlin ?: throw SerializationException("Cannot determine class for value $value")
-    return SerialCache.lookupSerializer(klass)
-}
-
-fun <E> resolveLoader(className: String): KSerializer<E> {
-    val klass = Class.forName(className).kotlin
-    return SerialCache.lookupSerializer(klass)
 }

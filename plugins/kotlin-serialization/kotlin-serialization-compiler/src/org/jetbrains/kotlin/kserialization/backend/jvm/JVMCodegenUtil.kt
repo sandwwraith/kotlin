@@ -118,7 +118,7 @@ internal fun ImplementationBodyCodegen.generateMethod(function: FunctionDescript
 
 
 internal val enumSerializerId = ClassId(internalPackageFqName, Name.identifier("EnumSerializer"))
-internal val polymorphicSerializerId = ClassId(internalPackageFqName, Name.identifier("RealDynamicSerializer"))
+internal val polymorphicSerializerId = ClassId(internalPackageFqName, Name.identifier("PolymorphicSerializer"))
 internal val referenceArraySerializerId = ClassId(internalPackageFqName, Name.identifier("ReferenceArraySerializer"))
 
 // returns false is property should not use serializer

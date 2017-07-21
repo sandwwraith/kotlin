@@ -260,33 +260,33 @@ object ArrayClassDesc : ListLikeDesc() {
 }
 
 object ArrayListClassDesc : ListLikeDesc() {
-    override val name: String get() = "java.util.ArrayList"
+    override val name: String get() = "kotlin.collections.ArrayList"
     override val kind: KSerialClassKind get() = KSerialClassKind.LIST
 }
 
 object LinkedHashSetClassDesc : ListLikeDesc() {
-    override val name: String get() = "java.util.LinkedHashSet"
+    override val name: String get() = "kotlin.collections.LinkedHashSet"
     override val kind: KSerialClassKind get() = KSerialClassKind.SET
 }
 
 object HashSetClassDesc : ListLikeDesc() {
-    override val name: String get() = "java.util.HashSet"
+    override val name: String get() = "kotlin.collections.HashSet"
     override val kind: KSerialClassKind get() = KSerialClassKind.SET
 }
 
 object LinkedHashMapClassDesc : ListLikeDesc() {
-    override val name: String get() = "java.util.LinkedHashMap"
+    override val name: String get() = "kotlin.collections.LinkedHashMap"
     override val kind: KSerialClassKind get() = KSerialClassKind.MAP
 }
 
 object HashMapClassDesc : ListLikeDesc() {
-    override val name: String get() = "java.util.HashMap"
+    override val name: String get() = "kotlin.collections.HashMap"
     override val kind: KSerialClassKind get() = KSerialClassKind.MAP
 }
 
 data class MapEntry<K, V>(override val key: K, override val value: V) : Map.Entry<K, V>
 
-object MapEntryClassDesc : SerialClassDescImpl("java.util.Map\$Entry") {
+object MapEntryClassDesc : SerialClassDescImpl("kotlin.collections.Map.Entry") {
     override val kind: KSerialClassKind = KSerialClassKind.ENTRY
 
     init {

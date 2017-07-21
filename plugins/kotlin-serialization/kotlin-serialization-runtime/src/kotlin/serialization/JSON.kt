@@ -153,11 +153,6 @@ data class JSON(
             else (d - 10 + 'a'.toInt()).toChar()
         }
 
-        private val PRIMITIVE_CLASSES = setOf(
-                Boolean::class, Byte::class, Short::class, Int::class, Long::class,
-                Float::class, Double::class, Char::class, String::class
-        )
-
         private fun switchMode(mode: Mode, desc: KSerialClassDesc, typeParams: Array<out KSerializer<*>>): Mode =
                 when (desc.kind) {
                     KSerialClassKind.POLYMORPHIC -> Mode.POLY

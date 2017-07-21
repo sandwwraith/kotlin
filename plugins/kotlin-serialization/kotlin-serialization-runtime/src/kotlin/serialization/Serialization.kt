@@ -18,7 +18,8 @@ package kotlin.serialization
 
 import kotlin.reflect.KClass
 import kotlin.reflect.full.companionObjectInstance
-import kotlin.serialization.internal.UnitClassDesc
+import kotlin.serialization.internal.SerialCache
+import kotlin.serialization.internal.UnitSerializer
 
 @Target(AnnotationTarget.PROPERTY, AnnotationTarget.CLASS)
 annotation class Serializable(
@@ -67,6 +68,19 @@ interface KSerialLoader<out T> {
 
 interface KSerializer<T>: KSerialSaver<T>, KSerialLoader<T> {
     val serialClassDesc: KSerialClassDesc
+}
+
+fun registerSerializer(forClassName: String, serializer: KSerializer<*>) {
+    SerialCache.map.put(forClassName, serializer)
+}
+
+fun <E> resolveSaver(value: E): KSerializer<E> {
+    val klass = (value as? Any)?.javaClass?.kotlin ?: throw SerializationException("Cannot determine class for value $value")
+    return SerialCache.lookupSerializer(klass.qualifiedName!!, klass)
+}
+
+fun <E> resolveLoader(className: String): KSerializer<E> {
+    return SerialCache.lookupSerializer(className)
 }
 
 class SerializationConstructorMarker private constructor()
@@ -269,7 +283,9 @@ open class ElementValueOutput : KOutput() {
     }
 
     override fun writeNullValue() { throw SerializationException("null is not supported") }
-    override fun writeUnitValue() { writeBegin(UnitClassDesc); writeEnd(UnitClassDesc) }
+    override fun writeUnitValue() {
+        val output = writeBegin(UnitSerializer.serialClassDesc); output.writeEnd(UnitSerializer.serialClassDesc)
+    }
 
     // type-specific value-based output, override for performance and custom type representations
     override fun writeBooleanValue(value: Boolean) = writeValue(value)
@@ -314,7 +330,9 @@ open class ElementValueInput : KInput() {
 
     override fun readValue(): Any { throw SerializationException("value is not supported") }
     override fun readNullableValue(): Any? = if (readNotNullMark()) readValue() else readNullValue()
-    override fun readUnitValue() { readBegin(UnitClassDesc); readEnd(UnitClassDesc) }
+    override fun readUnitValue() {
+        val reader = readBegin(UnitSerializer.serialClassDesc); reader.readEnd(UnitSerializer.serialClassDesc)
+    }
 
     // type-specific value-based input, override for performance and custom type representations
     override fun readBooleanValue(): Boolean = readValue() as Boolean
