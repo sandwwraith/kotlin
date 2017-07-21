@@ -511,7 +511,7 @@ public abstract class MemberCodegen<T extends KtPureElement/* TODO: & KtDeclarat
     public void beforeMethodBody(@NotNull MethodVisitor mv) {
     }
 
-    private void initializeProperty(@NotNull ExpressionCodegen codegen, @NotNull KtProperty property) {
+    public void initializeProperty(@NotNull ExpressionCodegen codegen, @NotNull KtProperty property) {
         PropertyDescriptor propertyDescriptor = (PropertyDescriptor) bindingContext.get(VARIABLE, property);
         assert propertyDescriptor != null;
 
@@ -536,7 +536,7 @@ public abstract class MemberCodegen<T extends KtPureElement/* TODO: & KtDeclarat
         propValue.store(delegateValue, codegen.v);
     }
 
-    protected boolean shouldInitializeProperty(@NotNull KtProperty property) {
+    public boolean shouldInitializeProperty(@NotNull KtProperty property) {
         if (!property.hasDelegateExpressionOrInitializer()) return false;
 
         PropertyDescriptor propertyDescriptor = (PropertyDescriptor) bindingContext.get(VARIABLE, property);
