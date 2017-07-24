@@ -75,7 +75,8 @@ object KSerializerDescriptorResolver {
 
     fun addSerialInfoImplClass(interfaceDesc: ClassDescriptor, declarationProvider: ClassMemberDeclarationProvider, ctx: LazyClassContext): ClassDescriptor {
         val interfaceDecl = declarationProvider.correspondingClassOrObject!!
-        val scope = ctx.declarationScopeProvider.getResolutionScopeForDeclaration(declarationProvider.ownerInfo!!.scopeAnchor);
+        val scope = ctx.declarationScopeProvider.getResolutionScopeForDeclaration(declarationProvider.ownerInfo!!.scopeAnchor)
+
         return SyntheticClassOrObjectDescriptor(ctx,
                                                 interfaceDecl,
                                                 interfaceDesc,
@@ -84,6 +85,7 @@ object KSerializerDescriptorResolver {
                                                 scope,
                                                 Modality.FINAL,
                                                 Visibilities.PUBLIC,
+                                                Visibilities.PRIVATE,
                                                 ClassKind.CLASS,
                                                 false)
     }

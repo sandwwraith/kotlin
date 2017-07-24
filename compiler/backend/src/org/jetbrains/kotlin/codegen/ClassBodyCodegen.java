@@ -97,11 +97,9 @@ public abstract class ClassBodyCodegen extends MemberCodegen<KtPureClassOrObject
         }
 
         // Generate synthetic nested classes
-        if (generateNonClassMembers) {
-            for (DeclarationDescriptor memberDescriptor : DescriptorUtils.getAllDescriptors(descriptor.getDefaultType().getMemberScope())) {
-                if (memberDescriptor instanceof SyntheticClassOrObjectDescriptor) {
-                    genSyntheticClassOrObject((SyntheticClassOrObjectDescriptor) memberDescriptor);
-                }
+        for (DeclarationDescriptor memberDescriptor : DescriptorUtils.getAllDescriptors(descriptor.getDefaultType().getMemberScope())) {
+            if (memberDescriptor instanceof SyntheticClassOrObjectDescriptor) {
+                genSyntheticClassOrObject((SyntheticClassOrObjectDescriptor) memberDescriptor);
             }
         }
 

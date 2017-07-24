@@ -67,6 +67,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static kotlin.collections.CollectionsKt.firstOrNull;
+import static org.jetbrains.kotlin.descriptors.Visibilities.PRIVATE;
 import static org.jetbrains.kotlin.descriptors.Visibilities.PUBLIC;
 import static org.jetbrains.kotlin.diagnostics.Errors.*;
 import static org.jetbrains.kotlin.resolve.BindingContext.TYPE;
@@ -484,9 +485,9 @@ public class LazyClassDescriptor extends ClassDescriptorBase implements ClassDes
             return null;
         return new SyntheticClassOrObjectDescriptor(c,
                 /* parentClassOrObject= */ classOrObject,
-                this, syntheticCompanionName, getSource(),
+                                                    this, syntheticCompanionName, getSource(),
                 /* outerScope= */ getOuterScope(),
-                Modality.FINAL, PUBLIC, ClassKind.OBJECT, true);
+                                                    Modality.FINAL, PUBLIC, PRIVATE, ClassKind.OBJECT, true);
     }
 
     @Nullable

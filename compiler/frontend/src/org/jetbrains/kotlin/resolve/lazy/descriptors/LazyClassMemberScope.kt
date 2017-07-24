@@ -81,6 +81,7 @@ open class LazyClassMemberScope(
 
         addDataClassMethods(result, location)
         addSyntheticCompanionObject(result, location)
+        addSyntheticNestedClasses(result, location)
 
         result.trimToSize()
         return result
@@ -129,7 +130,7 @@ open class LazyClassMemberScope(
 
     override fun getNonDeclaredClasses(name: Name, result: MutableSet<ClassDescriptor>) {
         generateSyntheticCompanionObject(name, result)
-        c.syntheticResolveExtension.addNonDeclaredClasses(thisDescriptor, declarationProvider, c, name, result)
+        c.syntheticResolveExtension.generateSyntheticClasses(thisDescriptor, name, c, declarationProvider, result)
     }
 
     override fun getNonDeclaredFunctions(name: Name, result: MutableSet<SimpleFunctionDescriptor>) {
@@ -214,10 +215,13 @@ open class LazyClassMemberScope(
     }
 
     private fun addSyntheticCompanionObject(result: MutableCollection<DeclarationDescriptor>, location: LookupLocation) {
-        result.addAll(c.syntheticResolveExtension.contributeAdditionalNames(thisDescriptor).mapNotNull { getContributedClassifier(it, location) }.toList())
         val syntheticCompanionName = c.syntheticResolveExtension.getSyntheticCompanionObjectNameIfNeeded(thisDescriptor) ?: return
         val descriptor = getContributedClassifier(syntheticCompanionName, location) ?: return
         result.add(descriptor)
+    }
+
+    private fun addSyntheticNestedClasses(result: MutableCollection<DeclarationDescriptor>, location: LookupLocation) {
+        result.addAll(c.syntheticResolveExtension.getSyntheticNestedClassNames(thisDescriptor).mapNotNull { getContributedClassifier(it, location) }.toList())
     }
 
     private fun generateSyntheticCompanionObject(name: Name, result: MutableSet<ClassDescriptor>) {

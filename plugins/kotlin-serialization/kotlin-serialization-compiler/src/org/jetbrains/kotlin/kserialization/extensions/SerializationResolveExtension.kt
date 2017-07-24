@@ -31,14 +31,14 @@ import org.jetbrains.kotlin.types.KotlinType
 import java.util.*
 
 class SerializationResolveExtension : SyntheticResolveExtension {
-    override fun contributeAdditionalNames(thisDescriptor: ClassDescriptor): List<Name> {
+    override fun getSyntheticNestedClassNames(thisDescriptor: ClassDescriptor): List<Name> {
         if (thisDescriptor.annotations.hasAnnotation(serialInfoFqName))
             return listOf(KSerializerDescriptorResolver.IMPL_NAME)
         else
             return listOf()
     }
 
-    override fun addNonDeclaredClasses(thisDescriptor: ClassDescriptor, declarationProvider: ClassMemberDeclarationProvider, ctx: LazyClassContext, name: Name, result: MutableSet<ClassDescriptor>) {
+    override fun generateSyntheticClasses(thisDescriptor: ClassDescriptor, name: Name, ctx: LazyClassContext, declarationProvider: ClassMemberDeclarationProvider, result: MutableSet<ClassDescriptor>) {
         if (thisDescriptor.annotations.hasAnnotation(serialInfoFqName) && name == KSerializerDescriptorResolver.IMPL_NAME)
             result.add(KSerializerDescriptorResolver.addSerialInfoImplClass(thisDescriptor, declarationProvider, ctx))
         return
