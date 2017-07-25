@@ -17,7 +17,7 @@
 package kotlin.serialization
 
 import kotlin.reflect.KClass
-import kotlin.reflect.full.companionObjectInstance
+import kotlin.reflect.companionObjectInstance
 import kotlin.serialization.internal.SerialCache
 import kotlin.serialization.internal.UnitSerializer
 
@@ -85,8 +85,8 @@ fun <E> resolveLoader(className: String): KSerializer<E> {
 
 class SerializationConstructorMarker private constructor()
 
-@Suppress("UNCHECKED_CAST")
-fun <T : Any> KClass<T>.serializer(): KSerializer<T> = companionObjectInstance as KSerializer<T>
+@Suppress("UNCHECKED_CAST", "DEPRECATION")
+fun <T : Any> KClass<T>.serializer(): KSerializer<T> = companionObjectInstance as KSerializer<T> //calls kotlin.reflect.full... =(
 
 
 // ====== Exceptions ======
