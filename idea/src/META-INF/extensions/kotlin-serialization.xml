@@ -2,7 +2,7 @@
     <id>org.jetbrains.kotlin</id>
 
     <extensions defaultExtensionNs="org.jetbrains.kotlin">
-        <expressionCodegenExtension implementation="org.jetbrains.kotlin.kserialization.extensions.SerializationCodegenExtension"/>
-        <syntheticResolveExtension implementation="org.jetbrains.kotlin.kserialization.extensions.SerializationResolveExtension"/>
+        <expressionCodegenExtension implementation="org.jetbrains.kotlinx.serialization.compiler.extensions.SerializationCodegenExtension"/>
+        <syntheticResolveExtension implementation="org.jetbrains.kotlinx.serialization.compiler.extensions.SerializationResolveExtension"/>
     </extensions>
 </idea-plugin>

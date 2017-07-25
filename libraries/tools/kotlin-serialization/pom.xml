@@ -20,7 +20,8 @@
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>kotlin-serialization</artifactId>
+    <groupId>org.jetbrains.kotlinx</groupId>
+    <artifactId>kotlinx-serialization</artifactId>
     <packaging>jar</packaging>
 
     <description>Serialization plugin for Gradle</description>
