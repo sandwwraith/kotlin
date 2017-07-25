@@ -136,7 +136,7 @@ class SerializableCodegenImpl(
                 // setting field
                 load(0, thisAsmType)
                 load(propOffset, propType)
-                putfield(thisAsmType.internalName, prop.name, propType.descriptor)
+                putfield(thisAsmType.internalName, prop.descriptor.name.asString(), propType.descriptor)
             }
             else {
                 genValidateProperty(i) { seenMask }
@@ -147,7 +147,7 @@ class SerializableCodegenImpl(
                 // todo: validate nullability
                 load(0, thisAsmType)
                 load(propOffset, propType)
-                putfield(thisAsmType.internalName, prop.name, propType.descriptor)
+                putfield(thisAsmType.internalName, prop.descriptor.name.asString(), propType.descriptor)
                 goTo(nextLabel)
                 visitLabel(setLbl)
                 // setting defaultValue
