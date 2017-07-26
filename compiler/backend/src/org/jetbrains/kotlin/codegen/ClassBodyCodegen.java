@@ -27,8 +27,11 @@ import org.jetbrains.kotlin.psi.synthetics.SyntheticClassOrObjectDescriptor;
 import org.jetbrains.kotlin.psi.synthetics.SyntheticClassOrObjectDescriptorKt;
 import org.jetbrains.kotlin.resolve.BindingContext;
 import org.jetbrains.kotlin.resolve.DescriptorUtils;
+import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter;
+import org.jetbrains.kotlin.resolve.scopes.MemberScope;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
@@ -102,7 +105,10 @@ public abstract class ClassBodyCodegen extends MemberCodegen<KtPureClassOrObject
         }
 
         // Generate synthetic nested classes
-        for (DeclarationDescriptor memberDescriptor : DescriptorUtils.getAllDescriptors(descriptor.getDefaultType().getMemberScope())) {
+        Collection<DeclarationDescriptor> classifiers = descriptor
+                .getUnsubstitutedMemberScope()
+                .getContributedDescriptors(DescriptorKindFilter.CLASSIFIERS, MemberScope.Companion.getALL_NAME_FILTER());
+        for (DeclarationDescriptor memberDescriptor : classifiers) {
             if (memberDescriptor instanceof SyntheticClassOrObjectDescriptor) {
                 genSyntheticClassOrObject((SyntheticClassOrObjectDescriptor) memberDescriptor);
             }
