@@ -195,7 +195,7 @@ public abstract class ClassBodyCodegen extends MemberCodegen<KtPureClassOrObject
     }
 
     @NotNull
-    public List<KtParameter> getPrimaryConstructorParameters() {
+    protected List<KtParameter> getPrimaryConstructorParameters() {
         if (myClass instanceof KtClass) {
             return myClass.getPrimaryConstructorParameters();
         }
