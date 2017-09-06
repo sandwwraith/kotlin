@@ -100,7 +100,7 @@ public abstract class ClassBodyCodegen extends MemberCodegen<KtPureClassOrObject
 
         // Generate synthetic (non-declared) companion if needed
         ClassDescriptor companionObjectDescriptor = descriptor.getCompanionObjectDescriptor();
-        if (companionObjectDescriptor instanceof SyntheticClassOrObjectDescriptor) {
+        if (companionObjectDescriptor instanceof SyntheticClassOrObjectDescriptor && kind != OwnerKind.DEFAULT_IMPLS) {
             genSyntheticClassOrObject((SyntheticClassOrObjectDescriptor) companionObjectDescriptor);
         }
 
@@ -109,7 +109,7 @@ public abstract class ClassBodyCodegen extends MemberCodegen<KtPureClassOrObject
                 .getUnsubstitutedMemberScope()
                 .getContributedDescriptors(DescriptorKindFilter.CLASSIFIERS, MemberScope.Companion.getALL_NAME_FILTER());
         for (DeclarationDescriptor memberDescriptor : classifiers) {
-            if (memberDescriptor instanceof SyntheticClassOrObjectDescriptor) {
+            if (memberDescriptor instanceof SyntheticClassOrObjectDescriptor && kind != OwnerKind.DEFAULT_IMPLS) {
                 genSyntheticClassOrObject((SyntheticClassOrObjectDescriptor) memberDescriptor);
             }
         }

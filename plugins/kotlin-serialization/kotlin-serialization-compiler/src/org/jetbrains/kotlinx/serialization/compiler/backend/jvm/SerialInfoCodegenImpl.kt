@@ -24,28 +24,31 @@ import org.jetbrains.kotlin.descriptors.impl.SimpleFunctionDescriptorImpl
 import org.jetbrains.kotlin.descriptors.impl.ValueParameterDescriptorImpl
 import org.jetbrains.kotlinx.serialization.compiler.resolve.KSerializerDescriptorResolver
 import org.jetbrains.kotlin.resolve.BindingContext
+import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.OtherOrigin
 import org.jetbrains.kotlin.resolve.scopes.getDescriptorsFiltered
+import org.jetbrains.kotlinx.serialization.compiler.backend.common.SerialImplCodegen
 import org.jetbrains.org.objectweb.asm.Opcodes
 import org.jetbrains.org.objectweb.asm.Type
 
-class SerialInfoCodegenImpl(val codegen: ImplementationBodyCodegen, val thisClass: ClassDescriptor, val bindingContext: BindingContext) {
+class SerialInfoCodegenImpl(val codegen: ImplementationBodyCodegen, bindingContext: BindingContext)
+    : SerialImplCodegen(codegen.myClass, bindingContext) {
     val thisAsmType = codegen.typeMapper.mapClass(thisClass)
 
-    fun generate() {
-        val props = thisClass.unsubstitutedMemberScope.getDescriptorsFiltered().filterIsInstance<PropertyDescriptor>()
-        generateFieldsAndSetters(props)
-        generateConstructor(props)
-    }
-
-    private fun generateFieldsAndSetters(props: List<PropertyDescriptor>) {
+    override fun generateFieldsAndSetters(props: List<PropertyDescriptor>) {
         props.forEach { prop ->
             val propType = codegen.typeMapper.mapType(prop.type)
+            // backing field
             val propFieldName = "_" + prop.name.identifier
             codegen.v.newField(OtherOrigin(codegen.myClass.psiOrParent), Opcodes.ACC_PRIVATE or Opcodes.ACC_FINAL or Opcodes.ACC_SYNTHETIC,
                                propFieldName, propType.descriptor, null, null)
-            val f = SimpleFunctionDescriptorImpl.create(thisClass, Annotations.EMPTY, prop.name, CallableMemberDescriptor.Kind.SYNTHESIZED, thisClass.source)
-            f.initialize(null, thisClass.thisAsReceiverParameter, emptyList(), emptyList(), prop.type, Modality.FINAL, Visibilities.PUBLIC)
+
+            // annotation classes properties don't have prefix 'get'
+            val f = if (DescriptorUtils.isAnnotationClass(thisClass.containingDeclaration)) {
+                SimpleFunctionDescriptorImpl.create(thisClass, Annotations.EMPTY, prop.name, CallableMemberDescriptor.Kind.SYNTHESIZED, thisClass.source)
+                        .apply { initialize(null, thisClass.thisAsReceiverParameter, emptyList(), emptyList(), prop.type, Modality.FINAL, Visibilities.PUBLIC) }
+            }
+            else prop.getter!!
             codegen.generateMethod(f, { _, _ ->
                 load(0, thisAsmType)
                 getfield(thisAsmType.internalName, propFieldName, propType.descriptor)
@@ -54,24 +57,8 @@ class SerialInfoCodegenImpl(val codegen: ImplementationBodyCodegen, val thisClas
         }
     }
 
-    private fun generateConstructor(props: List<PropertyDescriptor>) {
-        val constr = ClassConstructorDescriptorImpl.createSynthesized(
-                thisClass,
-                Annotations.EMPTY,
-                false,
-                thisClass.source
-        )
-        val args = mutableListOf<ValueParameterDescriptor>()
-        var i = 0
-        props.forEach { prop ->
-            args.add(ValueParameterDescriptorImpl(constr, null, i++, Annotations.EMPTY, prop.name, prop.type, false, false, false, null, constr.source))
-        }
-        constr.initialize(
-                args,
-                Visibilities.PUBLIC
-        )
-
-        constr.returnType = thisClass.defaultType
+    override fun generateConstructor(props: List<PropertyDescriptor>) {
+        val constr = createSyntheticImplConstructorDescriptor(props)
 
         codegen.generateMethod(constr, { _, _ ->
             load(0, thisAsmType)
@@ -93,7 +80,7 @@ class SerialInfoCodegenImpl(val codegen: ImplementationBodyCodegen, val thisClas
         fun generateSerialInfoImplBody(codegen: ImplementationBodyCodegen) {
             val thisClass = codegen.descriptor
             if (KSerializerDescriptorResolver.isSerialInfoImpl(thisClass))
-                SerialInfoCodegenImpl(codegen, thisClass, codegen.bindingContext).generate()
+                SerialInfoCodegenImpl(codegen, codegen.bindingContext).generate()
         }
     }
 }

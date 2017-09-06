@@ -24,6 +24,7 @@ import org.jetbrains.kotlin.incremental.components.NoLookupLocation
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.synthetics.SyntheticClassOrObjectDescriptor
 import org.jetbrains.kotlin.resolve.BindingContext
+import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
 import org.jetbrains.kotlin.resolve.lazy.LazyClassContext
 import org.jetbrains.kotlin.resolve.lazy.declarations.ClassMemberDeclarationProvider
@@ -54,7 +55,11 @@ object KSerializerDescriptorResolver {
     fun isSerialInfoImpl(thisDescriptor: ClassDescriptor): Boolean {
         return thisDescriptor.name == IMPL_NAME
                && thisDescriptor.containingDeclaration is LazyClassDescriptor
-               && thisDescriptor.containingDeclaration.annotations.hasAnnotation(serialInfoFqName)
+               && requiresSyntheticImpl(thisDescriptor.containingDeclaration as LazyClassDescriptor)
+    }
+
+    fun requiresSyntheticImpl(classDescriptor: ClassDescriptor): Boolean {
+        return (classDescriptor.annotations.hasAnnotation(serialInfoFqName) || (classDescriptor.isInternalSerializable && DescriptorUtils.isInterface(classDescriptor)))
     }
 
     fun addSerialInfoSuperType(thisDescriptor: ClassDescriptor, supertypes: MutableList<KotlinType>) {
