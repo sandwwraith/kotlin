@@ -18,6 +18,7 @@ package org.jetbrains.kotlinx.serialization.compiler.resolve
 
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.resolve.BindingContext
+import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.descriptorUtil.getSuperClassNotAny
 import org.jetbrains.kotlin.resolve.descriptorUtil.hasDefaultValue
 import org.jetbrains.kotlin.resolve.descriptorUtil.hasOwnParametersWithDefaultValue
@@ -46,7 +47,7 @@ class SerializableProperties(private val serializableClass: ClassDescriptor, val
                     .partition { primaryConstructorProperties.contains(it.descriptor) }
                     .run {
                         val supers = serializableClass.getSuperClassNotAny()
-                        if (supers == null || !supers.isInternalSerializable)
+                        if (supers == null || !supers.defaultSerializable)
                             first + second
                         else
                             SerializableProperties(supers, bindingContext).serializableProperties + first + second
@@ -54,10 +55,11 @@ class SerializableProperties(private val serializableClass: ClassDescriptor, val
 
 
     private fun isPropSerializable(it: PropertyDescriptor) =
-            if (serializableClass.isInternalSerializable) !it.annotations.serialTransient
+            if (serializableClass.defaultSerializable) !it.annotations.serialTransient
             else !Visibilities.isPrivate(it.visibility) && ((it.isVar && !it.annotations.serialTransient) || primaryConstructorProperties.contains(it))
 
-    val serializableConstructorProperties: List<SerializableProperty> =
+    val serializableConstructorProperties: List<SerializableProperty> = if (DescriptorUtils.isInterface(serializableClass)) serializableProperties
+        else
             serializableProperties.asSequence()
                     .filter { primaryConstructorProperties.contains(it.descriptor) }
                     .toList()

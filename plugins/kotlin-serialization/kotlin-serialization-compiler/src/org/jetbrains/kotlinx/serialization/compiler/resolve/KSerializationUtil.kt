@@ -22,6 +22,7 @@ import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.descriptorUtil.module
 import org.jetbrains.kotlin.resolve.scopes.getDescriptorsFiltered
 import org.jetbrains.kotlin.types.*
@@ -114,8 +115,11 @@ val KotlinType?.toClassDescriptor: ClassDescriptor?
     get() = this?.constructor?.declarationDescriptor as? ClassDescriptor
 
 
-val ClassDescriptor.isInternalSerializable: Boolean //todo normal checking
+val ClassDescriptor.defaultSerializable: Boolean //todo normal checking
     get() = annotations.hasAnnotation(serializableAnnotationFqName) && annotations.serializableWith == null
+
+val ClassDescriptor.internalSerializable: Boolean
+    get() = this.defaultSerializable && !(DescriptorUtils.isInterface(this) || this.modality == Modality.ABSTRACT)
 
 // serializer that was declared for this type
 internal val ClassDescriptor?.classSerializer: KotlinType?
@@ -123,7 +127,7 @@ internal val ClassDescriptor?.classSerializer: KotlinType?
         // serializer annotation on class?
         annotations.serializableWith?.let { return it }
         // default serializable?
-        if (isInternalSerializable) {
+        if (defaultSerializable) {
             // companion object serializer?
             if (hasCompanionObjectAsSerializer) return companionObjectDescriptor?.defaultType
             // $serializer nested class
@@ -157,7 +161,7 @@ val KotlinType.genericIndex: Int?
 fun getSerializableClassDescriptorByCompanion(thisDescriptor: ClassDescriptor): ClassDescriptor? {
     if (!thisDescriptor.isCompanionObject) return null
     val classDescriptor = (thisDescriptor.containingDeclaration as? ClassDescriptor) ?: return null
-    if (!classDescriptor.isInternalSerializable) return null
+    if (!classDescriptor.defaultSerializable) return null
     return classDescriptor
 }
 
@@ -166,7 +170,7 @@ fun getSerializableClassDescriptorBySerializer(serializerDescriptor: ClassDescri
     if (serializerForClass != null) return serializerForClass.toClassDescriptor
     if (serializerDescriptor.name != SERIALIZER_CLASS_NAME) return null
     val classDescriptor = (serializerDescriptor.containingDeclaration as? ClassDescriptor) ?: return null
-    if (!classDescriptor.isInternalSerializable) return null
+    if (!classDescriptor.defaultSerializable) return null
     return classDescriptor
 }
 

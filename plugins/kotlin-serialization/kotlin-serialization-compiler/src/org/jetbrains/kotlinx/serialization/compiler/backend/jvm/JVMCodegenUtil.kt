@@ -19,6 +19,7 @@ package org.jetbrains.kotlinx.serialization.compiler.backend.jvm
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.codegen.*
 import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.idea.debugger.evaluate.getClassDescriptor
 import org.jetbrains.kotlin.load.kotlin.TypeMappingMode
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.Name
@@ -73,12 +74,19 @@ internal fun InstructionAdapter.genExceptionThrow(exceptionClass: String, messag
 }
 
 fun InstructionAdapter.genKOutputMethodCall(property: SerializableProperty, classCodegen: ImplementationBodyCodegen, expressionCodegen: ExpressionCodegen,
-                                            propertyOwnerType: Type, ownerVar: Int, fromClassStartVar: Int? = null) {
+                                            propertyOwnerType: Type, ownerVar: Int, fromClassStartVar: Int? = null, isInterface: Boolean = false) {
     val propertyType = classCodegen.typeMapper.mapType(property.type)
     val sti = getSerialTypeInfo(property, propertyType)
     val useSerializer = if (fromClassStartVar == null) stackValueSerializerInstanceFromSerializer(classCodegen, sti)
     else stackValueSerializerInstanceFromClass(classCodegen, sti, fromClassStartVar)
-    if (!sti.unit) classCodegen.genPropertyOnStack(this, expressionCodegen.context, property.descriptor, propertyOwnerType, ownerVar)
+    if (!sti.unit) {
+        if (!isInterface) classCodegen.genPropertyOnStack(this, expressionCodegen.context, property.descriptor, propertyOwnerType, ownerVar)
+        else {
+            load(ownerVar, propertyOwnerType)
+            val method = classCodegen.typeMapper.mapAsmMethod(property.descriptor.getter!!)
+            invokeinterface(propertyOwnerType.internalName, method.name, method.descriptor)
+        }
+    }
     invokevirtual(kOutputType.internalName,
                   "write" + sti.elementMethodPrefix + (if (useSerializer) "Serializable" else "") + "ElementValue",
                   "(" + descType.descriptor + "I" +

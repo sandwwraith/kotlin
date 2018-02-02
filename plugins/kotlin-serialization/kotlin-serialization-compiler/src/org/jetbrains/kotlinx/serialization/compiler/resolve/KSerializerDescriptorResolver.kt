@@ -59,7 +59,7 @@ object KSerializerDescriptorResolver {
     }
 
     fun requiresSyntheticImpl(classDescriptor: ClassDescriptor): Boolean {
-        return (classDescriptor.annotations.hasAnnotation(serialInfoFqName) || (classDescriptor.isInternalSerializable && DescriptorUtils.isInterface(classDescriptor)))
+        return (classDescriptor.annotations.hasAnnotation(serialInfoFqName) || (classDescriptor.defaultSerializable && DescriptorUtils.isInterface(classDescriptor)))
     }
 
     fun addSerialInfoSuperType(thisDescriptor: ClassDescriptor, supertypes: MutableList<KotlinType>) {
@@ -220,7 +220,7 @@ object KSerializerDescriptorResolver {
             classDescriptor: ClassDescriptor,
             bindingContext: BindingContext
     ): ClassConstructorDescriptor {
-        if (!classDescriptor.isInternalSerializable) throw IllegalArgumentException()
+        if (!classDescriptor.defaultSerializable) throw IllegalArgumentException()
 
         val functionDescriptor = ClassConstructorDescriptorImpl.createSynthesized(
                 classDescriptor,

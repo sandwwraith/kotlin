@@ -47,7 +47,7 @@ class SerializableCodegenImpl(
     companion object {
         fun generateSerializableExtensions(codegen: ImplementationBodyCodegen) {
             val serializableClass = codegen.descriptor
-            if (serializableClass.isInternalSerializable)
+            if (serializableClass.internalSerializable)
                 SerializableCodegenImpl(codegen, serializableClass).generate()
         }
     }
@@ -76,9 +76,9 @@ class SerializableCodegenImpl(
 
         val superClass = serializableDescriptor.getSuperClassOrAny()
         val myPropsStart: Int
-        if (superClass.isInternalSerializable) {
+        if (superClass.internalSerializable) {
             myPropsStart = SerializableProperties(superClass, classCodegen.bindingContext).serializableProperties.size
-            val superTypeArguments =  serializableDescriptor.typeConstructor.supertypes.single { it.toClassDescriptor?.isInternalSerializable == true }.arguments
+            val superTypeArguments =  serializableDescriptor.typeConstructor.supertypes.single { it.toClassDescriptor?.defaultSerializable == true }.arguments
             //super.writeSelf(output, serialDesc)
             load(thisI, thisAsmType)
             load(outputI, kOutputType)
@@ -177,7 +177,7 @@ class SerializableCodegenImpl(
 
         load(0, thisAsmType)
 
-        if (!superClass.isInternalSerializable) {
+        if (!superClass.defaultSerializable) {
             require(superClass.constructors.firstOrNull { it.valueParameters.isEmpty() } != null,
                     { "Non-serializable parent of serializable $serializableDescriptor must have no arg constructor" })
 

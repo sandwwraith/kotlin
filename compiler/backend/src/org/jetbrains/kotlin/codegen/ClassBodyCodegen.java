@@ -77,6 +77,16 @@ public abstract class ClassBodyCodegen extends MemberCodegen<KtPureClassOrObject
                     }
                 }
             }
+
+            // Generate synthetic nested classes
+            Collection<DeclarationDescriptor> classifiers = descriptor
+                    .getUnsubstitutedMemberScope()
+                    .getContributedDescriptors(DescriptorKindFilter.CLASSIFIERS, MemberScope.Companion.getALL_NAME_FILTER());
+            for (DeclarationDescriptor memberDescriptor : classifiers) {
+                if (memberDescriptor instanceof SyntheticClassOrObjectDescriptor) {
+                    genSyntheticClassOrObject((SyntheticClassOrObjectDescriptor) memberDescriptor);
+                }
+            }
         }
 
         for (KtDeclaration declaration : myClass.getDeclarations()) {
@@ -96,22 +106,6 @@ public abstract class ClassBodyCodegen extends MemberCodegen<KtPureClassOrObject
         // Generate _declared_ companions
         for (KtObjectDeclaration companion : companions) {
             genClassOrObject(companion);
-        }
-
-        // Generate synthetic (non-declared) companion if needed
-        ClassDescriptor companionObjectDescriptor = descriptor.getCompanionObjectDescriptor();
-        if (companionObjectDescriptor instanceof SyntheticClassOrObjectDescriptor && kind != OwnerKind.DEFAULT_IMPLS) {
-            genSyntheticClassOrObject((SyntheticClassOrObjectDescriptor) companionObjectDescriptor);
-        }
-
-        // Generate synthetic nested classes
-        Collection<DeclarationDescriptor> classifiers = descriptor
-                .getUnsubstitutedMemberScope()
-                .getContributedDescriptors(DescriptorKindFilter.CLASSIFIERS, MemberScope.Companion.getALL_NAME_FILTER());
-        for (DeclarationDescriptor memberDescriptor : classifiers) {
-            if (memberDescriptor instanceof SyntheticClassOrObjectDescriptor && kind != OwnerKind.DEFAULT_IMPLS) {
-                genSyntheticClassOrObject((SyntheticClassOrObjectDescriptor) memberDescriptor);
-            }
         }
 
         if (generateNonClassMembers) {

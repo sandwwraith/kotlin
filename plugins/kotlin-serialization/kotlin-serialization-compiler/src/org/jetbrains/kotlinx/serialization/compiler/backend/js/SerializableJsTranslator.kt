@@ -33,7 +33,7 @@ import org.jetbrains.kotlinx.serialization.compiler.backend.common.anonymousInit
 import org.jetbrains.kotlinx.serialization.compiler.backend.common.bodyPropertiesDescriptorsMap
 import org.jetbrains.kotlinx.serialization.compiler.backend.common.primaryPropertiesDescriptorsMap
 import org.jetbrains.kotlinx.serialization.compiler.resolve.getClassFromSerializationPackage
-import org.jetbrains.kotlinx.serialization.compiler.resolve.isInternalSerializable
+import org.jetbrains.kotlinx.serialization.compiler.resolve.defaultSerializable
 
 class SerializableJsTranslator(val declaration: KtPureClassOrObject,
                                val translator: DeclarationBodyVisitor,
@@ -97,7 +97,7 @@ class SerializableJsTranslator(val declaration: KtPureClassOrObject,
 
     companion object {
         fun translate(declaration: KtPureClassOrObject, descriptor: ClassDescriptor, translator: DeclarationBodyVisitor, context: TranslationContext) {
-            if (descriptor.isInternalSerializable)
+            if (descriptor.defaultSerializable)
                 SerializableJsTranslator(declaration, translator, context).generate()
         }
     }

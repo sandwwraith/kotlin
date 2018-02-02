@@ -21,6 +21,7 @@ import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.ConstructorDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
+import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.jvm.AsmTypes
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.OtherOrigin
 import org.jetbrains.kotlinx.serialization.compiler.backend.common.SerializerCodegen
@@ -28,7 +29,7 @@ import org.jetbrains.kotlinx.serialization.compiler.backend.common.annotationVar
 import org.jetbrains.kotlinx.serialization.compiler.resolve.KSerializerDescriptorResolver
 import org.jetbrains.kotlinx.serialization.compiler.resolve.KSerializerDescriptorResolver.typeArgPrefix
 import org.jetbrains.kotlinx.serialization.compiler.resolve.getSerializableClassDescriptorBySerializer
-import org.jetbrains.kotlinx.serialization.compiler.resolve.isInternalSerializable
+import org.jetbrains.kotlinx.serialization.compiler.resolve.internalSerializable
 import org.jetbrains.org.objectweb.asm.Label
 import org.jetbrains.org.objectweb.asm.Opcodes.*
 import org.jetbrains.org.objectweb.asm.Type
@@ -41,6 +42,7 @@ class SerializerCodegenImpl(
 
 
     private val serialDescField = "\$\$serialDesc"
+    private val isInterface = DescriptorUtils.isInterface(serializableDescriptor)
 
     private val serializerAsmType = codegen.typeMapper.mapClass(codegen.descriptor)
     private val serializableAsmType = codegen.typeMapper.mapClass(serializableClass)
@@ -71,6 +73,8 @@ class SerializerCodegenImpl(
 
     }
 
+    private val syntheticImplNamePostfix = "\$" + KSerializerDescriptorResolver.IMPL_NAME.identifier
+
     override fun generateSerialDesc() {
         codegen.v.newField(OtherOrigin(codegen.myClass.psiOrParent), ACC_PRIVATE or ACC_STATIC or ACC_FINAL or ACC_SYNTHETIC,
                            serialDescField, descType.descriptor, null, null)
@@ -91,7 +95,7 @@ class SerializerCodegenImpl(
                 // pushing annotations
                 for (annotationClass in property.annotations) {
                     load(classDescVar, descImplType)
-                    val implType = codegen.typeMapper.mapType(annotationClass).internalName + "\$" + KSerializerDescriptorResolver.IMPL_NAME.identifier
+                    val implType = codegen.typeMapper.mapType(annotationClass).internalName + syntheticImplNamePostfix
                     // new Annotation$Impl(...)
                     anew(Type.getObjectType(implType))
                     dup()
@@ -145,7 +149,7 @@ class SerializerCodegenImpl(
                           "(" + descType.descriptor + kSerializerArrayType.descriptor +
                           ")" + kOutputType.descriptor, false)
             store(outputVar, kOutputType)
-            if (serializableDescriptor.isInternalSerializable) {
+            if (serializableDescriptor.internalSerializable) {
                 val sig = StringBuilder("(${kOutputType.descriptor}${descType.descriptor}")
                 // call obj.write$Self(output, classDesc)
                 load(objVar, objType)
@@ -170,7 +174,7 @@ class SerializerCodegenImpl(
                     load(outputVar, kOutputType)
                     load(descVar, descType)
                     iconst(index)
-                    genKOutputMethodCall(property, codegen, expressionCodegen, objType, objVar)
+                    genKOutputMethodCall(property, codegen, expressionCodegen, objType, objVar, isInterface = isInterface)
                 }
             }
             // output.writeEnd(classDesc)
@@ -339,7 +343,7 @@ class SerializerCodegenImpl(
             load(descVar, descType)
             invokevirtual(kInputType.internalName, "readEnd",
                           "(" + descType.descriptor + ")V", false)
-            if (!serializableDescriptor.isInternalSerializable) {
+            if (!serializableDescriptor.internalSerializable) {
                 //validate all required (constructor) fields
                 val nonThrowLabel = Label()
                 val throwLabel = Label()
@@ -362,13 +366,14 @@ class SerializerCodegenImpl(
                 visitLabel(nonThrowLabel)
             }
             // create object with constructor
-            anew(serializableAsmType)
+            val constructorName = serializableAsmType.internalName + if (isInterface) syntheticImplNamePostfix else ""
+            anew(Type.getObjectType(constructorName))
             dup()
-            val constructorDesc = if (serializableDescriptor.isInternalSerializable)
+            val constructorDesc = if (serializableDescriptor.internalSerializable)
                 buildInternalConstructorDesc(propsStartVar, bitMaskBase, codegen, properties.serializableProperties)
             else buildExternalConstructorDesc(propsStartVar, bitMaskBase)
-            invokespecial(serializableAsmType.internalName, "<init>", constructorDesc, false)
-            if (!serializableDescriptor.isInternalSerializable && !properties.serializableStandaloneProperties.isEmpty()) {
+            invokespecial(constructorName, "<init>", constructorDesc, false)
+            if (!serializableDescriptor.internalSerializable && !properties.serializableStandaloneProperties.isEmpty()) {
                 // result := ... <created object>
                 store(resultVar, serializableAsmType)
                 // set other properties

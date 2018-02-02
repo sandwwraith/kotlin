@@ -28,7 +28,6 @@ import org.jetbrains.kotlin.psi.KtPureClassOrObject
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlinx.serialization.compiler.backend.common.SerialImplCodegen
 import org.jetbrains.kotlinx.serialization.compiler.resolve.KSerializerDescriptorResolver
-import org.jetbrains.kotlinx.serialization.compiler.resolve.isInternalSerializable
 
 class SerialImplJsTranslator(declaration: KtPureClassOrObject,
                              val translator: DeclarationBodyVisitor,

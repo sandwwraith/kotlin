@@ -28,7 +28,7 @@ class SerializableCompanionCodegenImpl(private val codegen: ImplementationBodyCo
     companion object {
         fun generateSerializableExtensions(codegen: ImplementationBodyCodegen) {
             val serializableClass = getSerializableClassDescriptorByCompanion(codegen.descriptor) ?: return
-            if (serializableClass.isInternalSerializable)
+            if (serializableClass.defaultSerializable)
                 SerializableCompanionCodegenImpl(codegen).generate()
         }
     }

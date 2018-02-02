@@ -26,17 +26,19 @@ import org.jetbrains.kotlin.resolve.lazy.LazyClassContext
 import org.jetbrains.kotlin.resolve.lazy.declarations.ClassMemberDeclarationProvider
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlinx.serialization.compiler.resolve.KSerializerDescriptorResolver
+import org.jetbrains.kotlinx.serialization.compiler.resolve.defaultSerializable
 import org.jetbrains.kotlinx.serialization.compiler.resolve.getSerializableClassDescriptorByCompanion
 import org.jetbrains.kotlinx.serialization.compiler.resolve.hasCompanionObjectAsSerializer
-import org.jetbrains.kotlinx.serialization.compiler.resolve.isInternalSerializable
 import java.util.*
 
 class SerializationResolveExtension : SyntheticResolveExtension {
-    override fun getSyntheticNestedClassNames(thisDescriptor: ClassDescriptor): List<Name> = when {
-        KSerializerDescriptorResolver.requiresSyntheticImpl(thisDescriptor) -> listOf(KSerializerDescriptorResolver.IMPL_NAME)
-        thisDescriptor.isInternalSerializable && !thisDescriptor.hasCompanionObjectAsSerializer ->
-            listOf(KSerializerDescriptorResolver.SERIALIZER_CLASS_NAME)
-        else -> listOf()
+    override fun getSyntheticNestedClassNames(thisDescriptor: ClassDescriptor): List<Name> {
+        val ans = mutableListOf<Name>()
+        if (KSerializerDescriptorResolver.requiresSyntheticImpl(thisDescriptor))
+            ans.add(KSerializerDescriptorResolver.IMPL_NAME)
+        if (thisDescriptor.defaultSerializable && !thisDescriptor.hasCompanionObjectAsSerializer)
+            ans.add(KSerializerDescriptorResolver.SERIALIZER_CLASS_NAME)
+        return ans
     }
 
     override fun getSyntheticFunctionNames(thisDescriptor: ClassDescriptor): List<Name> = when {
@@ -48,14 +50,14 @@ class SerializationResolveExtension : SyntheticResolveExtension {
     override fun generateSyntheticClasses(thisDescriptor: ClassDescriptor, name: Name, ctx: LazyClassContext, declarationProvider: ClassMemberDeclarationProvider, result: MutableSet<ClassDescriptor>) {
         if (KSerializerDescriptorResolver.requiresSyntheticImpl(thisDescriptor) && name == KSerializerDescriptorResolver.IMPL_NAME)
             result.add(KSerializerDescriptorResolver.addSerialInfoImplClass(thisDescriptor, declarationProvider, ctx))
-        else if (thisDescriptor.isInternalSerializable && name == KSerializerDescriptorResolver.SERIALIZER_CLASS_NAME &&
+        else if (thisDescriptor.defaultSerializable && name == KSerializerDescriptorResolver.SERIALIZER_CLASS_NAME &&
                  result.none { it.name == KSerializerDescriptorResolver.SERIALIZER_CLASS_NAME })
             result.add(KSerializerDescriptorResolver.addSerializerImplClass(thisDescriptor, declarationProvider, ctx))
         return
     }
 
     override fun getSyntheticCompanionObjectNameIfNeeded(thisDescriptor: ClassDescriptor): Name? =
-            if (thisDescriptor.isInternalSerializable) SpecialNames.DEFAULT_NAME_FOR_COMPANION_OBJECT
+            if (thisDescriptor.defaultSerializable) SpecialNames.DEFAULT_NAME_FOR_COMPANION_OBJECT
             else null
 
     override fun addSyntheticSupertypes(thisDescriptor: ClassDescriptor, supertypes: MutableList<KotlinType>) {
