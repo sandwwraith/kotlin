@@ -118,7 +118,7 @@ fun DependencyHandlerScope.excludeInAndroidStudio(rootProject: Project, block: D
     }
 }
 
-fun Project.runIdeTask(name: String, ideaPluginDir: File, ideaSandboxDir: File, body: JavaExec.() -> Unit): JavaExec {
+fun Project.runIdeTask(name: String, ideaPluginDir: File, ideaSandboxDir: File, serialPluginDir: File, body: JavaExec.() -> Unit): JavaExec {
 
     return task<JavaExec>(name) {
         val ideaSandboxConfigDir = File(ideaSandboxDir, "config")
@@ -141,7 +141,7 @@ fun Project.runIdeTask(name: String, ideaPluginDir: File, ideaSandboxDir: File, 
             "-Dapple.laf.useScreenMenuBar=true",
             "-Dapple.awt.graphics.UseQuartz=true",
             "-Dsun.io.useCanonCaches=false",
-            "-Dplugin.path=${ideaPluginDir.absolutePath}",
+            "-Dplugin.path=${ideaPluginDir.absolutePath}:${serialPluginDir.absolutePath}",
             "-Didea.additional.classpath=../idea-kotlin-runtime/kotlin-runtime.jar,../idea-kotlin-runtime/kotlin-reflect.jar"
         )
 
