@@ -216,7 +216,10 @@ object KSerializerDescriptorResolver {
                 companionDescriptor, Annotations.EMPTY, name, CallableMemberDescriptor.Kind.SYNTHESIZED, companionDescriptor.source
         )
 
-        val typeParam = listOf(createProjection(classDescriptor.defaultType, Variance.INVARIANT, null))
+        val serializableClassOnImplSite = extractKSerializerArgumentFromImplementation(companionDescriptor)
+                ?: throw AssertionError("Serializer does not implement KSerializer??")
+
+        val typeParam = listOf(createProjection(serializableClassOnImplSite, Variance.INVARIANT, null))
         val functionFromSerializer = companionDescriptor.getKSerializerDescriptor().getMemberScope(typeParam)
                 .getContributedFunctions(name, NoLookupLocation.FROM_BUILTINS).single()
 

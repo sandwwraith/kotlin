@@ -51,6 +51,12 @@ fun ClassDescriptor.getKSerializerType(argument: SimpleType): SimpleType {
     return KotlinTypeFactory.simpleNotNullType(Annotations.EMPTY, getKSerializerDescriptor(), types)
 }
 
+internal fun extractKSerializerArgumentFromImplementation(implementationClass: ClassDescriptor): KotlinType? {
+    val kSerializerSupertype = implementationClass.typeConstructor.supertypes
+        .find { isKSerializer(it) } ?: return null
+    return kSerializerSupertype.arguments.first().type
+}
+
 // ---- java.io.Serializable
 
 internal val javaIOPackageFqName = FqName("java.io")
