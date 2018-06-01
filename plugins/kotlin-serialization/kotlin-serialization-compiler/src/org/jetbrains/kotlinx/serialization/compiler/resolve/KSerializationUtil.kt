@@ -153,9 +153,13 @@ internal fun checkSerializerNullability(classType: KotlinType, serializerType: K
     return serializerType
 }
 
+// returns only user-overriden Serializer
+val KotlinType.overridenSerializer: KotlinType?
+    get() = (this.toClassDescriptor?.annotations?.serializableWith)?.let { checkSerializerNullability(this, it) }
+
 // serializer that was declared for this specific type or annotation from a class declaration
 val KotlinType.typeSerializer: KotlinType?
-    get() = (this.annotations.serializableWith ?: (this.toClassDescriptor).classSerializer)?.let { checkSerializerNullability(this, it) }
+    get() = this.toClassDescriptor?.classSerializer
 
 val KotlinType.genericIndex: Int?
     get() = (this.constructor.declarationDescriptor as? TypeParameterDescriptor)?.index
@@ -204,10 +208,20 @@ inline fun <reified R> Annotations.findAnnotationValue(annotationFqName: FqName,
 fun ClassDescriptor.getKSerializerConstructorMarker(): ClassDescriptor =
         module.findClassAcrossModuleDependencies(ClassId(packageFqName, kSerializerConstructorMarkerName))!!
 
+fun ModuleDescriptor.getClassFromInternalSerializationPackage(classSimpleName: String) =
+    requireNotNull(
+        findClassAcrossModuleDependencies(
+            ClassId(
+                internalPackageFqName,
+                Name.identifier(classSimpleName)
+            )
+        )
+    ) { "Can't locate class $classSimpleName" }
+
 fun ClassDescriptor.getClassFromSerializationPackage(classSimpleName: String) =
         requireNotNull(module.findClassAcrossModuleDependencies(ClassId(packageFqName, Name.identifier(classSimpleName)))) {"Can't locate class $classSimpleName"}
 
 fun ClassDescriptor.getClassFromInternalSerializationPackage(classSimpleName: String) =
-        requireNotNull(module.findClassAcrossModuleDependencies(ClassId(internalPackageFqName, Name.identifier(classSimpleName)))) {"Can't locate class $classSimpleName"}
+    module.getClassFromInternalSerializationPackage(classSimpleName)
 
 fun ClassDescriptor.toSimpleType(nullable: Boolean = true) = KotlinTypeFactory.simpleType(Annotations.EMPTY, this.typeConstructor, emptyList(), nullable)
