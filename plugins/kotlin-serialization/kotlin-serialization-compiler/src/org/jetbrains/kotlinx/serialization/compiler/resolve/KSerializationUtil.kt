@@ -23,6 +23,7 @@ import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.descriptorUtil.module
+import org.jetbrains.kotlin.resolve.lazy.descriptors.LazyAnnotationDescriptor
 import org.jetbrains.kotlin.resolve.scopes.getDescriptorsFiltered
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.typeUtil.isSubtypeOf
@@ -121,7 +122,13 @@ val KotlinType?.toClassDescriptor: ClassDescriptor?
 
 
 val ClassDescriptor.isInternalSerializable: Boolean //todo normal checking
-    get() = annotations.hasAnnotation(serializableAnnotationFqName) && annotations.serializableWith == null
+    get() {
+        if (!annotations.hasAnnotation(serializableAnnotationFqName)) return false
+        val lazyDesc = annotations.findAnnotation(serializableAnnotationFqName)
+                as? LazyAnnotationDescriptor ?: return false
+        val psi = lazyDesc.annotationEntry
+        return psi.valueArguments.isEmpty()
+    }
 
 // serializer that was declared for this type
 internal val ClassDescriptor?.classSerializer: KotlinType?
