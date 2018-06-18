@@ -124,8 +124,10 @@ val KotlinType?.toClassDescriptor: ClassDescriptor?
 val ClassDescriptor.isInternalSerializable: Boolean //todo normal checking
     get() {
         if (!annotations.hasAnnotation(serializableAnnotationFqName)) return false
+        // If provided descriptor is lazy, carefully look at psi in order not to trigger full resolve which may be recursive.
+        // Otherwise, this descriptor is deserialized from another module and it is OK to check value right away.
         val lazyDesc = annotations.findAnnotation(serializableAnnotationFqName)
-                as? LazyAnnotationDescriptor ?: return false
+                as? LazyAnnotationDescriptor ?: return (annotations.serializableWith == null)
         val psi = lazyDesc.annotationEntry
         return psi.valueArguments.isEmpty()
     }
