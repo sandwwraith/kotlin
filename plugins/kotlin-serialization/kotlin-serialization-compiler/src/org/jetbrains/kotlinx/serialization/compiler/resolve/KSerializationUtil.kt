@@ -18,10 +18,12 @@ package org.jetbrains.kotlinx.serialization.compiler.resolve
 
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.descriptors.annotations.Annotated
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.psi.ValueArgument
 import org.jetbrains.kotlin.resolve.descriptorUtil.module
 import org.jetbrains.kotlin.resolve.lazy.descriptors.LazyAnnotationDescriptor
 import org.jetbrains.kotlin.resolve.scopes.getDescriptorsFiltered
@@ -234,3 +236,14 @@ fun ClassDescriptor.getClassFromInternalSerializationPackage(classSimpleName: St
     module.getClassFromInternalSerializationPackage(classSimpleName)
 
 fun ClassDescriptor.toSimpleType(nullable: Boolean = true) = KotlinTypeFactory.simpleType(Annotations.EMPTY, this.typeConstructor, emptyList(), nullable)
+
+fun Annotated.annotationsWithArguments(): List<Triple<ClassDescriptor, List<ValueArgument>, List<ValueParameterDescriptor>>> =
+    annotations.asSequence()
+        .filter { it.type.toClassDescriptor?.annotations?.hasAnnotation(serialInfoFqName) == true }
+        .filterIsInstance<LazyAnnotationDescriptor>()
+        .mapNotNull { annDesc ->
+            annDesc.type.toClassDescriptor?.let {
+                Triple(it, annDesc.annotationEntry.valueArguments, it.unsubstitutedPrimaryConstructor?.valueParameters.orEmpty())
+            }
+        }
+        .toList()
