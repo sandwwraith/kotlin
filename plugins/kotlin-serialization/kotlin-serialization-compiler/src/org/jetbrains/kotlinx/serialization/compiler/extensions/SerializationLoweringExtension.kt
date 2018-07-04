@@ -13,7 +13,7 @@ import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
 import org.jetbrains.kotlin.resolve.BindingContext
-import org.jetbrains.kotlinx.serialization.compiler.backend.ir.SerializerIrLowering
+import org.jetbrains.kotlinx.serialization.compiler.backend.ir.SerializerIrGenerator
 
 private class SerializerClassLowering(
     val context: BackendContext,
@@ -21,7 +21,7 @@ private class SerializerClassLowering(
 ) :
     IrElementTransformerVoid(), ClassLoweringPass {
     override fun lower(irClass: IrClass) {
-        SerializerIrLowering.lower(irClass, context, bindingContext)
+        SerializerIrGenerator.generate(irClass, context, bindingContext)
     }
 }
 
