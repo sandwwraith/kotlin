@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.backend.jvm
 
+import org.jetbrains.kotlin.backend.common.extensions.IrLoweringExtension
 import org.jetbrains.kotlin.backend.common.lower.*
 import org.jetbrains.kotlin.backend.common.runOnFilePostfix
 import org.jetbrains.kotlin.backend.jvm.lower.*
@@ -27,6 +28,8 @@ import org.jetbrains.kotlin.name.NameUtils
 
 class JvmLower(val context: JvmBackendContext) {
     fun lower(irFile: IrFile) {
+        val extensions = IrLoweringExtension.getInstances(context.state.project)
+        extensions.forEach { it.lowerFirst(irFile, context, context.state.bindingContext) }
         // TODO run lowering passes as callbacks in bottom-up visitor
         FileClassLowering(context).lower(irFile)
         KCallableNamePropertyLowering(context).lower(irFile)

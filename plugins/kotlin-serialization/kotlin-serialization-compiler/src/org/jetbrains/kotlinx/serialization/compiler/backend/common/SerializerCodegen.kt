@@ -20,15 +20,16 @@ import org.jetbrains.kotlin.backend.common.CodegenUtil.getMemberToGenerate
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation
 import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.psi.KtPureClassOrObject
-import org.jetbrains.kotlin.psi.synthetics.findClassDescriptor
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameUnsafe
 import org.jetbrains.kotlinx.serialization.compiler.resolve.*
 import org.jetbrains.kotlinx.serialization.compiler.resolve.KSerializerDescriptorResolver.createTypedSerializerConstructorDescriptor
 
-abstract class SerializerCodegen(declaration: KtPureClassOrObject, bindingContext: BindingContext) {
-    protected val serializerDescriptor: ClassDescriptor = declaration.findClassDescriptor(bindingContext)
+abstract class SerializerCodegen(
+    protected val serializerDescriptor: ClassDescriptor /*declaration: KtPureClassOrObject*/,
+    bindingContext: BindingContext
+) {
+    //    protected val serializerDescriptor: ClassDescriptor = declaration.findClassDescriptor(bindingContext)
     protected val serializableDescriptor: ClassDescriptor = getSerializableClassDescriptorBySerializer(serializerDescriptor)!!
     protected val serialName: String = serializableDescriptor.annotations.serialNameValue ?: serializableDescriptor.fqNameUnsafe.asString()
     protected val properties = SerializableProperties(serializableDescriptor, bindingContext)

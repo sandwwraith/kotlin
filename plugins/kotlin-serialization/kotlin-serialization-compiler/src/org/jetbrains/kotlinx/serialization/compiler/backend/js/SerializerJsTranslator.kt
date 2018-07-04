@@ -42,9 +42,9 @@ import org.jetbrains.kotlinx.serialization.compiler.backend.jvm.referenceArraySe
 import org.jetbrains.kotlinx.serialization.compiler.resolve.*
 import org.jetbrains.kotlinx.serialization.compiler.resolve.KSerializerDescriptorResolver.typeArgPrefix
 
-class SerializerJsTranslator(declaration: KtPureClassOrObject,
+class SerializerJsTranslator(descriptor: ClassDescriptor,
                              val translator: DeclarationBodyVisitor,
-                             val context: TranslationContext) : SerializerCodegen(declaration, context.bindingContext()) {
+                             val context: TranslationContext) : SerializerCodegen(descriptor, context.bindingContext()) {
 
     private fun generateFunction(descriptor: FunctionDescriptor, bodyGen: JsBlockBuilder.(JsFunction, TranslationContext) -> Unit) {
         val f = context.buildFunction(descriptor, bodyGen)
@@ -369,7 +369,7 @@ class SerializerJsTranslator(declaration: KtPureClassOrObject,
     companion object {
         fun translate(declaration: KtPureClassOrObject, descriptor: ClassDescriptor, translator: DeclarationBodyVisitor, context: TranslationContext) {
             if (getSerializableClassDescriptorBySerializer(descriptor) != null)
-                SerializerJsTranslator(declaration, translator, context).generate()
+                SerializerJsTranslator(descriptor, translator, context).generate()
         }
     }
 }
