@@ -29,7 +29,7 @@ class SerializerIrLowering(val irClass: IrClass, context: BindingContext) : Seri
 
     override fun generateSave(function: FunctionDescriptor) {
         println("Foobar")
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+//        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 
     override fun generateLoad(function: FunctionDescriptor) {
