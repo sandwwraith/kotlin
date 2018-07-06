@@ -37,11 +37,12 @@ abstract class SerializerCodegen(
 
     fun generate() {
         check(properties.isExternallySerializable) { "Class ${serializableDescriptor.name} is not externally serializable" }
+        generateSerialDesc()
         val prop = generateSerializableClassPropertyIfNeeded()
         val save = generateSaveIfNeeded()
         val load = generateLoadIfNeeded()
-        if (save || load || prop)
-            generateSerialDesc()
+//        if (save || load || prop)
+//            generateSerialDesc()
         if (serializableDescriptor.declaredTypeParameters.isNotEmpty() && typedSerializerConstructorNotDeclared()) {
             generateGenericFieldsAndConstructor(createTypedSerializerConstructorDescriptor(serializerDescriptor, serializableDescriptor))
         }
