@@ -31,7 +31,7 @@ class JvmBackendContext(
     val state: GenerationState,
     val psiSourceManager: PsiSourceManager,
     override val irBuiltIns: IrBuiltIns,
-    irModuleFragment: IrModuleFragment, symbolTable: SymbolTable
+    irModuleFragment: IrModuleFragment, override val symbolTable: SymbolTable
 ) : CommonBackendContext {
     override val builtIns = state.module.builtIns
     override val descriptorsFactory: JvmDescriptorsFactory = JvmDescriptorsFactory(psiSourceManager, builtIns)

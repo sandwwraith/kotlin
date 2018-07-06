@@ -20,10 +20,12 @@ import org.jetbrains.kotlin.backend.common.descriptors.DescriptorsFactory
 import org.jetbrains.kotlin.backend.common.descriptors.SharedVariablesManager
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
+import org.jetbrains.kotlin.ir.util.SymbolTable
 
 interface BackendContext {
     val builtIns: KotlinBuiltIns
     val irBuiltIns: IrBuiltIns
     val sharedVariablesManager: SharedVariablesManager
     val descriptorsFactory: DescriptorsFactory
+    val symbolTable: SymbolTable
 }
