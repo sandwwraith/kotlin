@@ -28,6 +28,7 @@ import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.pureEndOffset
 import org.jetbrains.kotlin.psi.psiUtil.pureStartOffset
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
+import org.jetbrains.kotlin.psi.synthetics.findClassDescriptor
 import org.jetbrains.kotlin.psi2ir.intermediate.VariableLValue
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
@@ -181,8 +182,7 @@ class BodyGenerator(
     fun generatePrimaryConstructorBody(ktClassOrObject: KtPureClassOrObject): IrBody {
         val irBlockBody = IrBlockBodyImpl(ktClassOrObject.pureStartOffset, ktClassOrObject.pureEndOffset)
 
-        if (ktClassOrObject is KtClassOrObject) // todo: super constructor calls for synthetic declarations
-            generateSuperConstructorCall(irBlockBody, ktClassOrObject)
+        generateSuperConstructorCall(irBlockBody, ktClassOrObject)
 
         val classDescriptor = (scopeOwner as ClassConstructorDescriptor).containingDeclaration
         irBlockBody.statements.add(
@@ -217,11 +217,12 @@ class BodyGenerator(
         return irBlockBody
     }
 
-    private fun generateSuperConstructorCall(irBlockBody: IrBlockBodyImpl, ktClassOrObject: KtClassOrObject) {
-        val classDescriptor = getOrFail(BindingContext.CLASS, ktClassOrObject)
+    private fun generateSuperConstructorCall(irBlockBody: IrBlockBodyImpl, ktClassOrObject: KtPureClassOrObject) {
+        val classDescriptor = ktClassOrObject.findClassDescriptor(context.bindingContext)
 
         when (classDescriptor.kind) {
-            ClassKind.ENUM_CLASS -> generateEnumSuperConstructorCall(irBlockBody, ktClassOrObject, classDescriptor)
+            // enums can't be synthetic
+            ClassKind.ENUM_CLASS -> generateEnumSuperConstructorCall(irBlockBody, ktClassOrObject as KtClassOrObject, classDescriptor)
 
             ClassKind.ENUM_ENTRY -> {
                 irBlockBody.statements.add(
@@ -232,7 +233,8 @@ class BodyGenerator(
             else -> {
                 val statementGenerator = createStatementGenerator()
 
-                ktClassOrObject.getSuperTypeList()?.let { ktSuperTypeList ->
+                // synthetic inheritance is not supported yet
+                (ktClassOrObject as? KtClassOrObject)?.getSuperTypeList()?.let { ktSuperTypeList ->
                     for (ktSuperTypeListEntry in ktSuperTypeList.entries) {
                         if (ktSuperTypeListEntry is KtSuperTypeCallEntry) {
                             val superConstructorCall = statementGenerator.pregenerateCall(getResolvedCall(ktSuperTypeListEntry)!!)
@@ -256,11 +258,11 @@ class BodyGenerator(
         }
     }
 
-    private fun generateAnySuperConstructorCall(irBlockBody: IrBlockBodyImpl, ktElement: KtElement) {
+    private fun generateAnySuperConstructorCall(irBlockBody: IrBlockBodyImpl, ktElement: KtPureElement) {
         val anyConstructor = context.builtIns.any.constructors.single()
         irBlockBody.statements.add(
             IrDelegatingConstructorCallImpl(
-                ktElement.startOffset, ktElement.endOffset,
+                ktElement.pureStartOffset, ktElement.pureEndOffset,
                 context.irBuiltIns.unitType,
                 context.symbolTable.referenceConstructor(anyConstructor),
                 anyConstructor
