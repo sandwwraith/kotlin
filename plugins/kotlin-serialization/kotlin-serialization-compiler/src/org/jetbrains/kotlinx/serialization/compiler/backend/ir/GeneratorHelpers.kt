@@ -9,6 +9,8 @@ import org.jetbrains.kotlin.backend.common.BackendContext
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.builders.IrBuilderWithScope
+import org.jetbrains.kotlin.ir.builders.IrGeneratorContext
+import org.jetbrains.kotlin.ir.builders.Scope
 import org.jetbrains.kotlin.ir.builders.irCall
 import org.jetbrains.kotlin.ir.declarations.IrDeclaration
 import org.jetbrains.kotlin.ir.declarations.IrField
@@ -17,9 +19,7 @@ import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.declarations.impl.IrFieldImpl
 import org.jetbrains.kotlin.ir.declarations.impl.IrFunctionImpl
 import org.jetbrains.kotlin.ir.declarations.impl.IrPropertyImpl
-import org.jetbrains.kotlin.ir.expressions.IrBlockBody
-import org.jetbrains.kotlin.ir.expressions.IrCall
-import org.jetbrains.kotlin.ir.expressions.IrExpression
+import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.*
 import org.jetbrains.kotlin.ir.symbols.IrFieldSymbol
 import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
@@ -27,6 +27,7 @@ import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
 import org.jetbrains.kotlin.ir.util.createParameterDeclarations
 import org.jetbrains.kotlin.ir.util.withScope
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.types.KotlinType
 
 interface IrBuilderExtension {
     val compilerContext: BackendContext
@@ -65,6 +66,28 @@ interface IrBuilderExtension {
                 builder(irDeclaration)
             }
         }
+
+    fun IrBuilderWithScope.irEmptyVararg(forValueParameter: ValueParameterDescriptor) =
+        IrVarargImpl(startOffset, endOffset, forValueParameter.type, forValueParameter.varargElementType!!)
+
+    class BranchBuilder(
+        val irWhen: IrWhen,
+        context: IrGeneratorContext,
+        scope: Scope,
+        startOffset: Int,
+        endOffset: Int
+    ) : IrBuilderWithScope(context, scope, startOffset, endOffset) {
+        operator fun IrBranch.unaryPlus() {
+            irWhen.branches.add(this)
+        }
+    }
+
+    fun IrBuilderWithScope.irWhen(typeHint: KotlinType? = null, block: BranchBuilder.() -> Unit): IrWhen {
+        val whenExpr = IrWhenImpl(startOffset, endOffset, typeHint ?: compilerContext.builtIns.unitType)
+        val builder = BranchBuilder(whenExpr, context, scope, startOffset, endOffset)
+        builder.block()
+        return whenExpr
+    }
 }
 
 /*
