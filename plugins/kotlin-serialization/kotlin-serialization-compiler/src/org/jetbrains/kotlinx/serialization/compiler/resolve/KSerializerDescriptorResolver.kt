@@ -38,7 +38,7 @@ import java.util.*
 
 object KSerializerDescriptorResolver {
 
-    val SERIAL_DESC_FIELD = "serialClassDesc"
+    val SERIAL_DESC_FIELD = "descriptor"
     val SAVE = "serialize"
     val LOAD = "deserialize"
     val SERIALIZER_CLASS = "\$serializer"

@@ -208,7 +208,7 @@ class K2JVMCompiler : CLICompiler<K2JVMCompilerArguments>() {
                     if (!it) return COMPILATION_ERROR
                 }
             }
-            
+
             return OK
         } catch (e: CompilationException) {
             messageCollector.report(
