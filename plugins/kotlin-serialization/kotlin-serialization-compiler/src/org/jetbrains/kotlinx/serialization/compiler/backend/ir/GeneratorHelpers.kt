@@ -8,6 +8,8 @@ package org.jetbrains.kotlinx.serialization.compiler.backend.ir
 import org.jetbrains.kotlin.backend.common.BackendContext
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
+import org.jetbrains.kotlin.ir.builders.IrBuilderWithScope
+import org.jetbrains.kotlin.ir.builders.irCall
 import org.jetbrains.kotlin.ir.declarations.IrDeclaration
 import org.jetbrains.kotlin.ir.declarations.IrField
 import org.jetbrains.kotlin.ir.declarations.IrProperty
@@ -16,26 +18,61 @@ import org.jetbrains.kotlin.ir.declarations.impl.IrFieldImpl
 import org.jetbrains.kotlin.ir.declarations.impl.IrFunctionImpl
 import org.jetbrains.kotlin.ir.declarations.impl.IrPropertyImpl
 import org.jetbrains.kotlin.ir.expressions.IrBlockBody
+import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.impl.*
 import org.jetbrains.kotlin.ir.symbols.IrFieldSymbol
+import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
 import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
 import org.jetbrains.kotlin.ir.util.createParameterDeclarations
 import org.jetbrains.kotlin.ir.util.withScope
+import org.jetbrains.kotlin.name.Name
+
+interface IrBuilderExtension {
+    val compilerContext: BackendContext
+
+    fun IrBuilderWithScope.irInvoke(
+        dispatchReceiver: IrExpression? = null,
+        callee: IrFunctionSymbol,
+        vararg args: IrExpression
+    ): IrCall {
+        val call = irCall(callee)
+        call.dispatchReceiver = dispatchReceiver
+        args.forEachIndexed(call::putValueArgument)
+        return call
+    }
+
+    fun IrBuilderWithScope.irBinOp(name: Name, lhs: IrExpression, rhs: IrExpression): IrExpression {
+        val symbol = compilerContext.ir.symbols.getBinaryOperator(
+            name,
+            lhs.type,
+            rhs.type
+        )
+        return irInvoke(lhs, symbol, rhs)
+    }
+
+    fun IrBuilderWithScope.irGetObject(classDescriptor: ClassDescriptor) =
+        IrGetObjectValueImpl(
+            startOffset,
+            endOffset,
+            classDescriptor.defaultType,
+            compilerContext.symbolTable.referenceClass(classDescriptor)
+        )
+
+    fun <T : IrDeclaration> T.buildWithScope(builder: (T) -> Unit): T =
+        also { irDeclaration ->
+            compilerContext.symbolTable.withScope(irDeclaration.descriptor) {
+                builder(irDeclaration)
+            }
+        }
+}
 
 /*
- This file is mainly copied from FunctionGenerator.
+ The rest of the file is mainly copied from FunctionGenerator.
  However, I can't use it's directly because all generateSomething methods require KtProperty (psi element)
  Also, FunctionGenerator itself has DeclarationGenerator as ctor param, which is a part of psi2ir
  (it can be instantiated here, but I don't know how good is that idea)
  */
-
-inline fun <T : IrDeclaration> T.buildWithScope(context: BackendContext, builder: (T) -> Unit): T =
-    also { irDeclaration ->
-        context.symbolTable.withScope(irDeclaration.descriptor) {
-            builder(irDeclaration)
-        }
-    }
 
 fun BackendContext.generateSimplePropertyWithBackingField(ownerSymbol: IrValueSymbol, propertyDescriptor: PropertyDescriptor): IrProperty {
     val irProperty = IrPropertyImpl(
