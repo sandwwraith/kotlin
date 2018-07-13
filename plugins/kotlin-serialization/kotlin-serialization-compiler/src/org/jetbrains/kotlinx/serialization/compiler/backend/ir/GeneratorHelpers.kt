@@ -12,25 +12,27 @@ import org.jetbrains.kotlin.ir.builders.IrBuilderWithScope
 import org.jetbrains.kotlin.ir.builders.IrGeneratorContext
 import org.jetbrains.kotlin.ir.builders.Scope
 import org.jetbrains.kotlin.ir.builders.irCall
-import org.jetbrains.kotlin.ir.declarations.IrDeclaration
-import org.jetbrains.kotlin.ir.declarations.IrField
-import org.jetbrains.kotlin.ir.declarations.IrProperty
-import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
-import org.jetbrains.kotlin.ir.declarations.impl.IrFieldImpl
-import org.jetbrains.kotlin.ir.declarations.impl.IrFunctionImpl
+import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.impl.IrPropertyImpl
+import org.jetbrains.kotlin.ir.declarations.impl.IrTypeParameterImpl
+import org.jetbrains.kotlin.ir.declarations.impl.IrValueParameterImpl
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.*
 import org.jetbrains.kotlin.ir.symbols.IrFieldSymbol
 import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
+import org.jetbrains.kotlin.ir.symbols.IrValueParameterSymbol
 import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
-import org.jetbrains.kotlin.ir.util.createParameterDeclarations
+import org.jetbrains.kotlin.ir.types.IrType
+import org.jetbrains.kotlin.ir.types.toKotlinType
+import org.jetbrains.kotlin.ir.util.TypeTranslator
+import org.jetbrains.kotlin.ir.util.declareSimpleFunctionWithOverrides
 import org.jetbrains.kotlin.ir.util.withScope
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.types.KotlinType
 
 interface IrBuilderExtension {
     val compilerContext: BackendContext
+    val translator: TypeTranslator
 
     fun IrBuilderWithScope.irInvoke(
         dispatchReceiver: IrExpression? = null,
@@ -46,8 +48,8 @@ interface IrBuilderExtension {
     fun IrBuilderWithScope.irBinOp(name: Name, lhs: IrExpression, rhs: IrExpression): IrExpression {
         val symbol = compilerContext.ir.symbols.getBinaryOperator(
             name,
-            lhs.type,
-            rhs.type
+            lhs.type.toKotlinType(),
+            rhs.type.toKotlinType()
         )
         return irInvoke(lhs, symbol, rhs)
     }
@@ -56,7 +58,7 @@ interface IrBuilderExtension {
         IrGetObjectValueImpl(
             startOffset,
             endOffset,
-            classDescriptor.defaultType,
+            classDescriptor.defaultType.toIrType(),
             compilerContext.symbolTable.referenceClass(classDescriptor)
         )
 
@@ -68,7 +70,12 @@ interface IrBuilderExtension {
         }
 
     fun IrBuilderWithScope.irEmptyVararg(forValueParameter: ValueParameterDescriptor) =
-        IrVarargImpl(startOffset, endOffset, forValueParameter.type, forValueParameter.varargElementType!!)
+        IrVarargImpl(
+            startOffset,
+            endOffset,
+            forValueParameter.type.toIrType(),
+            forValueParameter.varargElementType!!.toIrType()
+        )
 
     class BranchBuilder(
         val irWhen: IrWhen,
@@ -82,122 +89,177 @@ interface IrBuilderExtension {
         }
     }
 
-    fun IrBuilderWithScope.irWhen(typeHint: KotlinType? = null, block: BranchBuilder.() -> Unit): IrWhen {
-        val whenExpr = IrWhenImpl(startOffset, endOffset, typeHint ?: compilerContext.builtIns.unitType)
+    fun IrBuilderWithScope.irWhen(typeHint: IrType? = null, block: BranchBuilder.() -> Unit): IrWhen {
+        val whenExpr = IrWhenImpl(startOffset, endOffset, typeHint ?: compilerContext.irBuiltIns.unitType)
         val builder = BranchBuilder(whenExpr, context, scope, startOffset, endOffset)
         builder.block()
         return whenExpr
     }
-}
 
-/*
- The rest of the file is mainly copied from FunctionGenerator.
- However, I can't use it's directly because all generateSomething methods require KtProperty (psi element)
- Also, FunctionGenerator itself has DeclarationGenerator as ctor param, which is a part of psi2ir
- (it can be instantiated here, but I don't know how good is that idea)
- */
+    fun BranchBuilder.elseBranch(result: IrExpression): IrElseBranch =
+        IrElseBranchImpl(
+            IrConstImpl.boolean(result.startOffset, result.endOffset, compilerContext.irBuiltIns.booleanType, true),
+            result
+        )
 
-fun BackendContext.generateSimplePropertyWithBackingField(ownerSymbol: IrValueSymbol, propertyDescriptor: PropertyDescriptor): IrProperty {
-    val irProperty = IrPropertyImpl(
-        UNDEFINED_OFFSET, UNDEFINED_OFFSET,
-        SERIALIZABLE_PLUGIN_ORIGIN, false,
-        propertyDescriptor
-    )
-    irProperty.backingField = generatePropertyBackingField(propertyDescriptor)
-    val fieldSymbol = irProperty.backingField!!.symbol
-    irProperty.getter = propertyDescriptor.getter?.let { generatePropertyAccessor(it, fieldSymbol, ownerSymbol) }//?.apply { symbol.bind() }
-    irProperty.setter = propertyDescriptor.setter?.let { generatePropertyAccessor(it, fieldSymbol, ownerSymbol) }
-    return irProperty
-}
+    fun translateType(ktType: KotlinType): IrType =
+        translator.translateType(ktType)
 
-fun BackendContext.generatePropertyBackingField(propertyDescriptor: PropertyDescriptor): IrField {
-    return IrFieldImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, SERIALIZABLE_PLUGIN_ORIGIN, propertyDescriptor)
-}
+    fun KotlinType.toIrType() = translateType(this)
 
-fun BackendContext.generatePropertyAccessor(
-    descriptor: PropertyAccessorDescriptor,
-    fieldSymbol: IrFieldSymbol,
-    ownerSymbol: IrValueSymbol
-): IrSimpleFunction {
-    val irAccessor = IrFunctionImpl(
-        UNDEFINED_OFFSET, UNDEFINED_OFFSET,
-        SERIALIZABLE_PLUGIN_ORIGIN,
-        descriptor
-    ) // is it mandatory to add something to .overridenSymbols??
-    symbolTable.withScope(irAccessor.descriptor) {
-        irAccessor.createParameterDeclarations()
-        irAccessor.body = when (descriptor) {
-            is PropertyGetterDescriptor -> generateDefaultGetterBody(descriptor, irAccessor, fieldSymbol, ownerSymbol)
-            is PropertySetterDescriptor -> generateDefaultSetterBody(descriptor, irAccessor, fieldSymbol, ownerSymbol)
-            else -> throw AssertionError("Should be getter or setter: $descriptor")
+
+    /*
+     The rest of the file is mainly copied from FunctionGenerator.
+     However, I can't use it's directly because all generateSomething methods require KtProperty (psi element)
+     Also, FunctionGenerator itself has DeclarationGenerator as ctor param, which is a part of psi2ir
+     (it can be instantiated here, but I don't know how good is that idea)
+     */
+
+    fun generateSimplePropertyWithBackingField(
+        ownerSymbol: IrValueSymbol,
+        propertyDescriptor: PropertyDescriptor,
+        propertyParent: IrClass
+    ): IrProperty {
+        val irProperty = IrPropertyImpl(
+            UNDEFINED_OFFSET, UNDEFINED_OFFSET,
+            SERIALIZABLE_PLUGIN_ORIGIN, false,
+            propertyDescriptor
+        )
+        irProperty.parent = propertyParent
+        irProperty.backingField = generatePropertyBackingField(propertyDescriptor).apply { parent = propertyParent }
+        val fieldSymbol = irProperty.backingField!!.symbol
+        irProperty.getter = propertyDescriptor.getter?.let { generatePropertyAccessor(it, fieldSymbol, ownerSymbol) }
+            ?.apply { parent = propertyParent }
+        irProperty.setter = propertyDescriptor.setter?.let { generatePropertyAccessor(it, fieldSymbol, ownerSymbol) }
+            ?.apply { parent = propertyParent }
+        return irProperty
+    }
+
+    fun generatePropertyBackingField(propertyDescriptor: PropertyDescriptor): IrField {
+        return compilerContext.symbolTable.declareField(
+            UNDEFINED_OFFSET,
+            UNDEFINED_OFFSET,
+            SERIALIZABLE_PLUGIN_ORIGIN,
+            propertyDescriptor,
+            propertyDescriptor.type.toIrType()
+        )
+    }
+
+    fun generatePropertyAccessor(
+        descriptor: PropertyAccessorDescriptor,
+        fieldSymbol: IrFieldSymbol,
+        ownerSymbol: IrValueSymbol
+    ): IrSimpleFunction {
+        return compilerContext.symbolTable.declareSimpleFunctionWithOverrides(
+            UNDEFINED_OFFSET, UNDEFINED_OFFSET,
+            SERIALIZABLE_PLUGIN_ORIGIN, descriptor
+        ).buildWithScope { irAccessor ->
+            irAccessor.createParameterDeclarations((ownerSymbol as IrValueParameterSymbol).owner) // todo: neat this
+            irAccessor.returnType = irAccessor.descriptor.returnType!!.toIrType()
+            irAccessor.body = when (descriptor) {
+                is PropertyGetterDescriptor -> generateDefaultGetterBody(descriptor, irAccessor, ownerSymbol)
+                is PropertySetterDescriptor -> generateDefaultSetterBody(descriptor, irAccessor, ownerSymbol)
+                else -> throw AssertionError("Should be getter or setter: $descriptor")
+            }
+        }
+
+    }
+
+    private fun generateDefaultGetterBody(
+        getter: PropertyGetterDescriptor,
+        irAccessor: IrSimpleFunction,
+        ownerSymbol: IrValueSymbol
+    ): IrBlockBody {
+        val property = getter.correspondingProperty
+
+        val irBody = IrBlockBodyImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET)
+
+        val receiver = generateReceiverExpressionForFieldAccess(ownerSymbol, property)
+
+        irBody.statements.add(
+            IrReturnImpl(
+                UNDEFINED_OFFSET, UNDEFINED_OFFSET, compilerContext.irBuiltIns.nothingType,
+                irAccessor.symbol,
+                IrGetFieldImpl(
+                    UNDEFINED_OFFSET, UNDEFINED_OFFSET,
+                    compilerContext.symbolTable.referenceField(property),
+                    property.type.toIrType(),
+                    receiver
+                )
+            )
+        )
+        return irBody
+    }
+
+    private fun generateDefaultSetterBody(
+        setter: PropertySetterDescriptor,
+        irAccessor: IrSimpleFunction,
+        ownerSymbol: IrValueSymbol
+    ): IrBlockBody {
+        val property = setter.correspondingProperty
+
+        val startOffset = UNDEFINED_OFFSET
+        val endOffset = UNDEFINED_OFFSET
+        val irBody = IrBlockBodyImpl(startOffset, endOffset)
+
+        val receiver = generateReceiverExpressionForFieldAccess(ownerSymbol, property)
+
+        val irValueParameter = irAccessor.valueParameters.single()
+        irBody.statements.add(
+            IrSetFieldImpl(
+                UNDEFINED_OFFSET, UNDEFINED_OFFSET,
+                compilerContext.symbolTable.referenceField(property),
+                receiver,
+                IrGetValueImpl(startOffset, endOffset, irValueParameter.type, irValueParameter.symbol),
+                compilerContext.irBuiltIns.unitType
+            )
+        )
+        return irBody
+    }
+
+    fun generateReceiverExpressionForFieldAccess(
+        ownerSymbol: IrValueSymbol,
+        property: PropertyDescriptor
+    ): IrExpression {
+        val containingDeclaration = property.containingDeclaration
+        return when (containingDeclaration) {
+            is ClassDescriptor ->
+                IrGetValueImpl(
+                    UNDEFINED_OFFSET, UNDEFINED_OFFSET,
+//                symbolTable.referenceValue(containingDeclaration.thisAsReceiverParameter)
+                    ownerSymbol
+                )
+            else -> throw AssertionError("Property must be in class")
         }
     }
-    return irAccessor
-}
 
-private fun BackendContext.generateDefaultGetterBody(
-    getter: PropertyGetterDescriptor,
-    irAccessor: IrSimpleFunction,
-    fieldSymbol: IrFieldSymbol,
-    ownerSymbol: IrValueSymbol
-): IrBlockBody {
-    val property = getter.correspondingProperty
-
-    val irBody = IrBlockBodyImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET)
-
-    val receiver = generateReceiverExpressionForFieldAccess(ownerSymbol, property)
-
-    irBody.statements.add(
-        IrReturnImpl(
-            UNDEFINED_OFFSET, UNDEFINED_OFFSET, this.builtIns.nothingType,
-            irAccessor.symbol,
-            IrGetFieldImpl(
-                UNDEFINED_OFFSET, UNDEFINED_OFFSET,
-                fieldSymbol,
-                receiver
-            )
-        )
-    )
-    return irBody
-}
-
-private fun BackendContext.generateDefaultSetterBody(
-    setter: PropertySetterDescriptor,
-    irAccessor: IrSimpleFunction,
-    fieldSymbol: IrFieldSymbol,
-    ownerSymbol: IrValueSymbol
-): IrBlockBody {
-    val property = setter.correspondingProperty
-
-    val irBody = IrBlockBodyImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET)
-
-    val receiver = generateReceiverExpressionForFieldAccess(ownerSymbol, property)
-
-    val setterParameter = irAccessor.valueParameters.single().symbol
-    irBody.statements.add(
-        IrSetFieldImpl(
+    // todo: delet zis
+    fun IrFunction.createParameterDeclarations(receiver: IrValueParameter? = null) {
+        fun ParameterDescriptor.irValueParameter() = IrValueParameterImpl(
             UNDEFINED_OFFSET, UNDEFINED_OFFSET,
-            fieldSymbol,
-            receiver,
-            IrGetValueImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, setterParameter)
-        )
-    )
-    return irBody
-}
+            SERIALIZABLE_PLUGIN_ORIGIN,
+            this,
+            type.toIrType(),
+            (this as? ValueParameterDescriptor)?.varargElementType?.toIrType()
+        ).also {
+            it.parent = this@createParameterDeclarations
+        }
 
-fun BackendContext.generateReceiverExpressionForFieldAccess(
-    ownerSymbol: IrValueSymbol,
-    property: PropertyDescriptor
-): IrExpression {
-    val containingDeclaration = property.containingDeclaration
-    return when (containingDeclaration) {
-        is ClassDescriptor ->
-            IrGetValueImpl(
+        dispatchReceiverParameter = receiver ?: (descriptor.dispatchReceiverParameter?.irValueParameter())
+        extensionReceiverParameter = descriptor.extensionReceiverParameter?.irValueParameter()
+
+        assert(valueParameters.isEmpty())
+        descriptor.valueParameters.mapTo(valueParameters) { it.irValueParameter() }
+
+        assert(typeParameters.isEmpty())
+        descriptor.typeParameters.mapTo(typeParameters) {
+            IrTypeParameterImpl(
                 UNDEFINED_OFFSET, UNDEFINED_OFFSET,
-                // can use ownerSymbol here if passing symbol table is undesirable
-//                symbolTable.referenceValue(containingDeclaration.thisAsReceiverParameter)
-                ownerSymbol
-            )
-        else -> throw AssertionError("Property must be in class")
+                SERIALIZABLE_PLUGIN_ORIGIN,
+                it
+            ).also { typeParameter ->
+                typeParameter.parent = this
+            }
+        }
     }
 }

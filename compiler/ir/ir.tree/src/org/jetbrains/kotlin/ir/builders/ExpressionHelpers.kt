@@ -162,6 +162,9 @@ fun IrBuilderWithScope.irSetField(receiver: IrExpression?, field: IrField, value
 fun IrBuilderWithScope.irGetObjectValue(type: IrType, classSymbol: IrClassSymbol) =
     IrGetObjectValueImpl(startOffset, endOffset, type, classSymbol)
 
+fun IrBuilderWithScope.irSetField(receiver: IrExpression, field: IrField, value: IrExpression) =
+    IrSetFieldImpl(startOffset, endOffset, field.symbol, receiver, value, context.irBuiltIns.unitType)
+
 fun IrBuilderWithScope.irEqeqeq(arg1: IrExpression, arg2: IrExpression) =
     context.eqeqeq(startOffset, endOffset, arg1, arg2)
 
