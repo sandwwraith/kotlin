@@ -6,12 +6,10 @@
 package org.jetbrains.kotlinx.serialization.compiler.backend.ir
 
 import org.jetbrains.kotlin.backend.common.BackendContext
+import org.jetbrains.kotlin.backend.common.lower.createIrBuilder
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
-import org.jetbrains.kotlin.ir.builders.IrBuilderWithScope
-import org.jetbrains.kotlin.ir.builders.IrGeneratorContext
-import org.jetbrains.kotlin.ir.builders.Scope
-import org.jetbrains.kotlin.ir.builders.irCall
+import org.jetbrains.kotlin.ir.builders.*
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.impl.IrPropertyImpl
 import org.jetbrains.kotlin.ir.declarations.impl.IrTypeParameterImpl
@@ -34,12 +32,27 @@ interface IrBuilderExtension {
     val compilerContext: BackendContext
     val translator: TypeTranslator
 
+    fun IrClass.contributeFunction(descriptor: FunctionDescriptor, bodyGen: IrBlockBodyBuilder.(IrFunction) -> Unit) {
+        val f = compilerContext.symbolTable.declareSimpleFunctionWithOverrides(
+            this.startOffset,
+            this.endOffset,
+            SERIALIZABLE_PLUGIN_ORIGIN,
+            descriptor
+        )
+        f.parent = this
+        f.returnType = descriptor.returnType!!.toIrType()
+        f.createParameterDeclarations()
+        f.body = compilerContext.createIrBuilder(f.symbol).irBlockBody { bodyGen(f) }
+        this.addMember(f)
+    }
+
     fun IrBuilderWithScope.irInvoke(
         dispatchReceiver: IrExpression? = null,
         callee: IrFunctionSymbol,
-        vararg args: IrExpression
+        vararg args: IrExpression,
+        typeHint: IrType? = null
     ): IrCall {
-        val call = irCall(callee)
+        val call = typeHint?.let { irCall(callee, type = it) } ?: irCall(callee)
         call.dispatchReceiver = dispatchReceiver
         args.forEachIndexed(call::putValueArgument)
         return call
