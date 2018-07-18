@@ -27,6 +27,7 @@ import org.jetbrains.kotlin.ir.util.declareSimpleFunctionWithOverrides
 import org.jetbrains.kotlin.ir.util.withScope
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlinx.serialization.compiler.resolve.SerializableProperty
 
 interface IrBuilderExtension {
     val compilerContext: BackendContext
@@ -44,6 +45,23 @@ interface IrBuilderExtension {
         f.createParameterDeclarations()
         f.body = compilerContext.createIrBuilder(f.symbol).irBlockBody { bodyGen(f) }
         this.addMember(f)
+    }
+
+    fun IrClass.contributeConstructor(
+        descriptor: ClassConstructorDescriptor,
+        bodyGen: IrBlockBodyBuilder.(IrConstructor) -> Unit
+    ) {
+        val c = compilerContext.symbolTable.declareConstructor(
+            this.startOffset,
+            this.endOffset,
+            SERIALIZABLE_PLUGIN_ORIGIN,
+            descriptor
+        )
+        c.parent = this
+        c.returnType = descriptor.returnType.toIrType()
+        c.createParameterDeclarations()
+        c.body = compilerContext.createIrBuilder(c.symbol).irBlockBody { bodyGen(c) }
+        this.addMember(c)
     }
 
     fun IrBuilderWithScope.irInvoke(
@@ -121,12 +139,27 @@ interface IrBuilderExtension {
     fun KotlinType.toIrType() = translateType(this)
 
 
+    val SerializableProperty.irField: IrField
+        get () = compilerContext.symbolTable.referenceField(this.descriptor).owner
+
     /*
      The rest of the file is mainly copied from FunctionGenerator.
      However, I can't use it's directly because all generateSomething methods require KtProperty (psi element)
      Also, FunctionGenerator itself has DeclarationGenerator as ctor param, which is a part of psi2ir
      (it can be instantiated here, but I don't know how good is that idea)
      */
+
+    fun IrBuilderWithScope.generateAnySuperConstructorCall(toBuilder: IrBlockBodyBuilder) {
+        val anyConstructor = compilerContext.builtIns.any.constructors.single()
+        with(toBuilder) {
+            +IrDelegatingConstructorCallImpl(
+                startOffset, endOffset,
+                compilerContext.irBuiltIns.unitType,
+                compilerContext.symbolTable.referenceConstructor(anyConstructor),
+                anyConstructor
+            )
+        }
+    }
 
     fun generateSimplePropertyWithBackingField(
         ownerSymbol: IrValueSymbol,
