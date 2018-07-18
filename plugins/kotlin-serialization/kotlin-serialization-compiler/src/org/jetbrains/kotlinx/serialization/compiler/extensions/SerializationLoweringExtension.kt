@@ -9,12 +9,33 @@ import org.jetbrains.kotlin.backend.common.BackendContext
 import org.jetbrains.kotlin.backend.common.ClassLoweringPass
 import org.jetbrains.kotlin.backend.common.extensions.IrLoweringExtension
 import org.jetbrains.kotlin.backend.common.runOnFilePostfix
+import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
+import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
+import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
+import org.jetbrains.kotlin.ir.visitors.acceptVoid
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlinx.serialization.compiler.backend.ir.SerializableCompanionIrGenerator
+import org.jetbrains.kotlinx.serialization.compiler.backend.ir.SerializableIrGenerator
 import org.jetbrains.kotlinx.serialization.compiler.backend.ir.SerializerIrGenerator
+
+/**
+ * Copy of [runOnFilePostfix], but this implementation first lowers declaration, then its children.
+ */
+fun ClassLoweringPass.runOnFileInOrder(irFile: IrFile) {
+    irFile.acceptVoid(object : IrElementVisitorVoid {
+        override fun visitElement(element: IrElement) {
+            element.acceptChildrenVoid(this)
+        }
+
+        override fun visitClass(declaration: IrClass) {
+            lower(declaration)
+            declaration.acceptChildrenVoid(this)
+        }
+    })
+}
 
 private class SerializerClassLowering(
     val context: BackendContext,
@@ -22,6 +43,7 @@ private class SerializerClassLowering(
 ) :
     IrElementTransformerVoid(), ClassLoweringPass {
     override fun lower(irClass: IrClass) {
+        SerializableIrGenerator.generate(irClass, context, bindingContext)
         SerializerIrGenerator.generate(irClass, context, bindingContext)
         SerializableCompanionIrGenerator.generate(irClass, context, bindingContext)
     }
@@ -33,6 +55,6 @@ class SerializationLoweringExtension : IrLoweringExtension {
         backendContext: BackendContext,
         bindingContext: BindingContext
     ) {
-        SerializerClassLowering(backendContext, bindingContext).runOnFilePostfix(file)
+        SerializerClassLowering(backendContext, bindingContext).runOnFileInOrder(file)
     }
 }
