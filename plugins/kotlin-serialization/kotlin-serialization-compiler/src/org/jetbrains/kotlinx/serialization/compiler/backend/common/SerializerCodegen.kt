@@ -27,7 +27,7 @@ import org.jetbrains.kotlinx.serialization.compiler.resolve.*
 import org.jetbrains.kotlinx.serialization.compiler.resolve.KSerializerDescriptorResolver.createTypedSerializerConstructorDescriptor
 
 abstract class SerializerCodegen(
-    protected val serializerDescriptor: ClassDescriptor /*declaration: KtPureClassOrObject*/,
+    protected val serializerDescriptor: ClassDescriptor,
     bindingContext: BindingContext
 ) {
     //    protected val serializerDescriptor: ClassDescriptor = declaration.findClassDescriptor(bindingContext)
@@ -67,7 +67,7 @@ abstract class SerializerCodegen(
         return !found
     }
 
-    protected val serialDescPropertyDescriptor = getPropertyToGenerate(serializerDescriptor, KSerializerDescriptorResolver.SERIAL_DESC_FIELD,
+    protected val serialDescPropertyDescriptor = getPropertyToGenerate(serializerDescriptor, SerialEntityNames.SERIAL_DESC_FIELD,
                                                                        serializerDescriptor::checkSerializableClassPropertyResult)
     protected abstract fun generateSerialDesc()
 
@@ -87,7 +87,7 @@ abstract class SerializerCodegen(
     }
 
     private fun generateSaveIfNeeded(): Boolean {
-        val function = getMemberToGenerate(serializerDescriptor, KSerializerDescriptorResolver.SAVE,
+        val function = getMemberToGenerate(serializerDescriptor, SerialEntityNames.SAVE,
                                            serializerDescriptor::checkSaveMethodResult, serializerDescriptor::checkSaveMethodParameters)
                        ?: return false
         generateSave(function)
@@ -95,7 +95,7 @@ abstract class SerializerCodegen(
     }
 
     private fun generateLoadIfNeeded(): Boolean {
-        val function = getMemberToGenerate(serializerDescriptor, KSerializerDescriptorResolver.LOAD,
+        val function = getMemberToGenerate(serializerDescriptor, SerialEntityNames.LOAD,
                                            serializerDescriptor::checkLoadMethodResult, serializerDescriptor::checkLoadMethodParameters)
                        ?: return false
         generateLoad(function)

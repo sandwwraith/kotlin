@@ -35,6 +35,10 @@ import org.jetbrains.kotlinx.serialization.compiler.backend.jvm.contextSerialize
 import org.jetbrains.kotlinx.serialization.compiler.backend.jvm.enumSerializerId
 import org.jetbrains.kotlinx.serialization.compiler.backend.jvm.referenceArraySerializerId
 import org.jetbrains.kotlinx.serialization.compiler.resolve.*
+import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.SERIAL_DESCRIPTOR_CLASS_IMPL
+import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.STRUCTURE_DECODER_CLASS
+import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.STRUCTURE_ENCODER_CLASS
+import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.UNKNOWN_FIELD_EXC
 
 // Is creating synthetic origin is a good idea or not?
 object SERIALIZABLE_PLUGIN_ORIGIN : IrDeclarationOriginImpl("SERIALIZER")
@@ -47,11 +51,11 @@ class SerializerIrGenerator(val irClass: IrClass, override val compilerContext: 
     override fun generateSerialDesc() {
         val desc: PropertyDescriptor = serialDescPropertyDescriptor ?: return
         val serialDescImplClass = serializerDescriptor
-            .getClassFromInternalSerializationPackage("SerialClassDescImpl")
+            .getClassFromInternalSerializationPackage(SERIAL_DESCRIPTOR_CLASS_IMPL)
         val serialDescImplConstructor = serialDescImplClass
             .unsubstitutedPrimaryConstructor!!
 
-        val addFuncS = serialDescImplClass.referenceMethod("addElement")
+        val addFuncS = serialDescImplClass.referenceMethod(CallingConventions.addElement)
         val initF = serialDescImplClass.referenceMethod("init")
 //        val pushFunc = serialDescImplClass.getFuncDesc("pushAnnotation").single()
 //        val pushClassFunc = serialDescImplClass.getFuncDesc("pushClassAnnotation").single()
@@ -127,7 +131,7 @@ class SerializerIrGenerator(val irClass: IrClass, override val compilerContext: 
         genericIndex: Int? = null
     ): IrExpression? {
         val nullableSerClass =
-            compilerContext.symbolTable.referenceClass(module.getClassFromInternalSerializationPackage("NullableSerializer"))
+            compilerContext.symbolTable.referenceClass(module.getClassFromInternalSerializationPackage(SpecialBuiltins.nullableSerializer))
         if (serializerClass == null) {
             if (genericIndex == null) return null
             return TODO("Saved serializer for generic argument")
@@ -168,14 +172,14 @@ class SerializerIrGenerator(val irClass: IrClass, override val compilerContext: 
         fun irThis(): IrExpression =
             IrGetValueImpl(startOffset, endOffset, saveFunc.dispatchReceiverParameter!!.symbol)
 
-        val kOutputClass = serializerDescriptor.getClassFromSerializationPackage("StructureEncoder")
+        val kOutputClass = serializerDescriptor.getClassFromSerializationPackage(STRUCTURE_ENCODER_CLASS)
 
         val descriptorGetterSymbol = compilerContext.symbolTable.referenceFunction(serialDescPropertyDescriptor?.getter!!)
 
         val localSerialDesc = irTemporary(irGet(descriptorGetterSymbol.owner.returnType, irThis(), descriptorGetterSymbol), "desc")
 
         //  fun beginStructure(desc: SerialDescriptor, vararg typeParams: KSerializer<*>): StructureEncoder
-        val beginFunc = kOutputClass.referenceMethod("beginStructure") // todo: retrieve from actual encoder instead
+        val beginFunc = kOutputClass.referenceMethod(CallingConventions.begin) // todo: retrieve from actual encoder instead
 
         val call = irCall(beginFunc).mapValueParametersIndexed { i, parameterDescriptor ->
             if (i == 0) irGet(localSerialDesc) else IrVarargImpl(
@@ -200,7 +204,7 @@ class SerializerIrGenerator(val irClass: IrClass, override val compilerContext: 
             val innerSerial = serializerInstance(sti.serializer, property.module, property.type, property.genericIndex)
             if (innerSerial == null) {
                 val writeFunc =
-                    kOutputClass.referenceMethod("encode${sti.elementMethodPrefix}ElementValue")
+                    kOutputClass.referenceMethod("${CallingConventions.encode}${sti.elementMethodPrefix}${CallingConventions.elementPostfix}")
                 +irInvoke(
                     irGet(localOutput),
                     writeFunc,
@@ -211,7 +215,7 @@ class SerializerIrGenerator(val irClass: IrClass, override val compilerContext: 
                     irGetField(irGet(serialObjectSymbol), compilerContext.symbolTable.referenceField(property.descriptor).owner)
                 )
             } else {
-                val writeFunc = kOutputClass.referenceMethod("encode${sti.elementMethodPrefix}SerializableElementValue")
+                val writeFunc = kOutputClass.referenceMethod("${CallingConventions.encode}${sti.elementMethodPrefix}Serializable${CallingConventions.elementPostfix}")
                 +irInvoke(
                     irGet(localOutput),
                     writeFunc,
@@ -226,12 +230,12 @@ class SerializerIrGenerator(val irClass: IrClass, override val compilerContext: 
         }
 
         // output.writeEnd(serialClassDesc)
-        val wEndFunc = kOutputClass.referenceMethod("endStructure")
+        val wEndFunc = kOutputClass.referenceMethod(CallingConventions.end)
         +irInvoke(irGet(localOutput), wEndFunc, irGet(localSerialDesc))
     }
 
     // returns null: Any? for boxed types and 0: <number type> for primitives
-    fun IrBuilderWithScope.defaultValueAndType(prop: SerializableProperty): Pair<IrExpression, KotlinType> {
+    private fun IrBuilderWithScope.defaultValueAndType(prop: SerializableProperty): Pair<IrExpression, KotlinType> {
         val kType = prop.descriptor.returnType!!
         val T = kType.toIrType()
         val defaultPrimitive: IrExpression? = when {
@@ -257,7 +261,7 @@ class SerializerIrGenerator(val irClass: IrClass, override val compilerContext: 
 
         fun IrVariable.get() = irGet(this)
 
-        val inputClass = serializerDescriptor.getClassFromSerializationPackage("StructureDecoder")
+        val inputClass = serializerDescriptor.getClassFromSerializationPackage(STRUCTURE_DECODER_CLASS)
         val descriptorGetterSymbol = compilerContext.symbolTable.referenceFunction(serialDescPropertyDescriptor?.getter!!)
         val localSerialDesc = irTemporary(irGet(descriptorGetterSymbol.owner.returnType, irThis(), descriptorGetterSymbol), "desc")
 
@@ -284,7 +288,7 @@ class SerializerIrGenerator(val irClass: IrClass, override val compilerContext: 
         }
 
         //input = input.beginStructure(...)
-        val beginFunc = inputClass.referenceMethod("beginStructure")
+        val beginFunc = inputClass.referenceMethod(CallingConventions.begin)
         val call = irInvoke(
             irGet(loadFunc.valueParameters[0]),
             beginFunc,
@@ -296,7 +300,7 @@ class SerializerIrGenerator(val irClass: IrClass, override val compilerContext: 
         +irWhile().also { loop ->
             loop.condition = flagVar.get()
             loop.body = irBlock {
-                val readElementF = inputClass.referenceMethod("decodeElement")
+                val readElementF = inputClass.referenceMethod(CallingConventions.decodeElementIndex)
                 +irSetVar(indexVar.symbol, irInvoke(localInput.get(), readElementF, localSerialDesc.get()))
                 +irWhen {
                     // if index == -2 (READ_ALL) todo...
@@ -311,8 +315,8 @@ class SerializerIrGenerator(val irClass: IrClass, override val compilerContext: 
                             val innerSerial = serializerInstance(sti.serializer, property.module, property.type, property.genericIndex)
                             // todo: update
                             val decodeFuncToCall =
-                                (if (innerSerial != null) "decode${sti.elementMethodPrefix}SerializableElementValue"
-                                else "decode${sti.elementMethodPrefix}ElementValue")
+                                (if (innerSerial != null) "${CallingConventions.decode}${sti.elementMethodPrefix}Serializable${CallingConventions.elementPostfix}"
+                                else "${CallingConventions.decode}${sti.elementMethodPrefix}${CallingConventions.elementPostfix}")
                                     .let {
                                         inputClass.referenceMethod(it)
                                     }
@@ -332,7 +336,7 @@ class SerializerIrGenerator(val irClass: IrClass, override val compilerContext: 
 
                     // throw exception on unknown field
                     val exceptionCtor =
-                        serializableDescriptor.getClassFromSerializationPackage("UnknownFieldException")
+                        serializableDescriptor.getClassFromSerializationPackage(UNKNOWN_FIELD_EXC)
                             .unsubstitutedPrimaryConstructor!!
                     val excClassRef = compilerContext.symbolTable.referenceConstructor(exceptionCtor)
                     +elseBranch(
@@ -350,7 +354,7 @@ class SerializerIrGenerator(val irClass: IrClass, override val compilerContext: 
         }
 
         //input.endStructure(...)
-        val endFunc = inputClass.referenceMethod("endStructure")
+        val endFunc = inputClass.referenceMethod(CallingConventions.end)
         +irInvoke(
             localInput.get(),
             endFunc,
