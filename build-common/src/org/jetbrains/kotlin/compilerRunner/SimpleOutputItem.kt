@@ -27,6 +27,6 @@ data class SimpleOutputItem(val sourceFiles: Collection<File>, val outputFile: F
 
 fun SimpleOutputItem.toGeneratedFile(): GeneratedFile =
         when {
-//            outputFile.name.endsWith(".class") -> GeneratedJvmClass(sourceFiles, outputFile)
+            outputFile.name.endsWith(".class") -> GeneratedJvmClass(sourceFiles, outputFile)
             else -> GeneratedFile(sourceFiles, outputFile)
         }
