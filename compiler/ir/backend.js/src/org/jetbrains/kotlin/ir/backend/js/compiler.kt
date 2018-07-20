@@ -7,6 +7,7 @@ package org.jetbrains.kotlin.ir.backend.js
 
 import com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.backend.common.*
+import org.jetbrains.kotlin.backend.common.extensions.IrLoweringExtension
 import org.jetbrains.kotlin.backend.common.lower.*
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.languageVersionSettings
@@ -23,6 +24,7 @@ import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.progress.ProgressIndicatorAndCompilationCanceledStatus
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi2ir.Psi2IrTranslator
+import org.jetbrains.kotlin.resolve.BindingContext
 
 data class Result(val moduleDescriptor: ModuleDescriptor, val generatedCode: String)
 
@@ -59,7 +61,7 @@ fun compile(
 
     context.performInlining(moduleFragment)
 
-    context.lower(moduleFragment.files)
+    context.lower(moduleFragment.files, project, psi2IrContext.bindingContext)
     val transformer = SecondaryCtorLowering.CallsiteRedirectionTransformer(context)
     moduleFragment.files.forEach { it.accept(transformer, null) }
 
@@ -80,7 +82,12 @@ private fun JsIrBackendContext.performInlining(moduleFragment: IrModuleFragment)
     }
 }
 
-private fun JsIrBackendContext.lower(files: List<IrFile>) {
+private fun JsIrBackendContext.lower(files: List<IrFile>, project: Project, bindingContext: BindingContext) {
+    val extensions = IrLoweringExtension.getInstances(project)
+    extensions.forEach { ext ->
+        files.forEach { file -> ext.lowerFirst(file, backendContext = this, bindingContext = bindingContext) }
+    }
+
     LateinitLowering(this, true).lower(files)
     DefaultArgumentStubGenerator(this).runOnFilePostfix(files)
     DefaultParameterInjector(this).runOnFilePostfix(files)
