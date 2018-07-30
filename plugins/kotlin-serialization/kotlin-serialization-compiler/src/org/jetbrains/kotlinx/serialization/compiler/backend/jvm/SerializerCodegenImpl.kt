@@ -22,6 +22,7 @@ import org.jetbrains.kotlin.psi.ValueArgument
 import org.jetbrains.kotlin.resolve.jvm.AsmTypes
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.OtherOrigin
 import org.jetbrains.kotlinx.serialization.compiler.backend.common.SerializerCodegen
+import org.jetbrains.kotlinx.serialization.compiler.backend.common.findTypeSerializerOrContext
 import org.jetbrains.kotlinx.serialization.compiler.resolve.*
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.typeArgPrefix
 import org.jetbrains.org.objectweb.asm.Label
@@ -39,6 +40,8 @@ class SerializerCodegenImpl(
 
     private val serializerAsmType = codegen.typeMapper.mapClass(codegen.descriptor)
     private val serializableAsmType = codegen.typeMapper.mapClass(serializableClass)
+
+    private val hasNoGenerics = serializableDescriptor.declaredTypeParameters.isEmpty()
 
     companion object {
         fun generateSerializerExtensions(codegen: ImplementationBodyCodegen) {
@@ -61,54 +64,75 @@ class SerializerCodegenImpl(
                 load(i+1, kSerializerType)
                 putfield(serializerAsmType.internalName, "$typeArgPrefix$i", kSerializerType.descriptor)
             }
+            load(0, serializableAsmType)
+            val freeSlot = serializableDescriptor.declaredTypeParameters.size + 1
+            doGenerateSerialDescInitializer(exprCodegen, freeSlot)
+            putfield(serializerAsmType.internalName, serialDescField, descType.descriptor)
             areturn(Type.VOID_TYPE)
         }
 
     }
 
-    override fun generateSerialDesc() {
-        codegen.v.newField(OtherOrigin(codegen.myClass.psiOrParent), ACC_PRIVATE or ACC_STATIC or ACC_FINAL or ACC_SYNTHETIC,
-                           serialDescField, descType.descriptor, null, null)
-        // todo: lazy initialization of $$serialDesc that is performed only when save/load is invoked first time
-        val expr = codegen.createOrGetClInitCodegen()
-        with(expr.v) {
-            val classDescVar = 0
-            anew(descImplType)
-            dup()
-            aconst(serialName)
-            invokespecial(descImplType.internalName, "<init>", "(Ljava/lang/String;)V", false)
-            store(classDescVar, descImplType)
-            for (property in orderedProperties) {
-                if (property.transient) continue
-                load(classDescVar, descImplType)
-                aconst(property.name)
-                invokevirtual(descImplType.internalName, CallingConventions.addElement, "(Ljava/lang/String;)V", false)
-                // pushing annotations
-                for ((annotationClass, args, consParams) in property.annotationsWithArguments) {
-                    if (args.size != consParams.size) throw IllegalArgumentException("Can't use arguments with defaults for serializable annotations yet")
-                    load(classDescVar, descImplType)
-                    expr.generateSyntheticAnnotationOnStack(annotationClass, args, consParams)
-                    invokevirtual(
-                        descImplType.internalName,
-                        CallingConventions.addAnnotation,
-                        "(Ljava/lang/annotation/Annotation;)V",
-                        false
-                    )
-                }
-            }
-            // add annotations on class itself
-            for ((annotationClass, args, consParams) in serializableDescriptor.annotationsWithArguments()) {
+    private fun InstructionAdapter.doGenerateSerialDescInitializer(expr: ExpressionCodegen, classDescVar: Int = 1) {
+        anew(descImplType)
+        dup()
+        aconst(serialName)
+        invokespecial(descImplType.internalName, "<init>", "(Ljava/lang/String;)V", false)
+        store(classDescVar, descImplType)
+        for (property in orderedProperties) {
+            if (property.transient) continue
+            load(classDescVar, descImplType)
+            aconst(property.name)
+            iconst(if (property.optional) 1 else 0)
+            invokevirtual(descImplType.internalName, CallingConventions.addElement, "(Ljava/lang/String;Z)V", false)
+            // pushing annotations
+            for ((annotationClass, args, consParams) in property.annotationsWithArguments) {
                 if (args.size != consParams.size) throw IllegalArgumentException("Can't use arguments with defaults for serializable annotations yet")
                 load(classDescVar, descImplType)
                 expr.generateSyntheticAnnotationOnStack(annotationClass, args, consParams)
                 invokevirtual(
                     descImplType.internalName,
-                    CallingConventions.addClassAnnotation,
+                    CallingConventions.addAnnotation,
                     "(Ljava/lang/annotation/Annotation;)V",
                     false
                 )
             }
+            // push descriptor
             load(classDescVar, descImplType)
+            val serializer = findTypeSerializerOrContext(property.module, property.type)
+                ?: throw AssertionError("Property ${property.name} must have serializer")
+            val useSerializer =
+                stackValueSerializerInstanceFromSerializer(codegen, serializer, property)
+            assert(useSerializer)
+            wrapSerializerIfNullable(property.type)
+            invokeinterface(kSerialLoaderType.internalName, "getDescriptor", "()${descType.descriptor}")
+            invokevirtual(descImplType.internalName, "pushDescriptor", "(${descType.descriptor})V", false)
+        }
+        // add annotations on class itself
+        for ((annotationClass, args, consParams) in serializableDescriptor.annotationsWithArguments()) {
+            if (args.size != consParams.size) throw IllegalArgumentException("Can't use arguments with defaults for serializable annotations yet")
+            load(classDescVar, descImplType)
+            expr.generateSyntheticAnnotationOnStack(annotationClass, args, consParams)
+            invokevirtual(
+                descImplType.internalName,
+                CallingConventions.addClassAnnotation,
+                "(Ljava/lang/annotation/Annotation;)V",
+                false
+            )
+        }
+        load(classDescVar, descImplType)
+    }
+
+    override fun generateSerialDesc() {
+        var flags = ACC_PRIVATE or ACC_SYNTHETIC
+        if (hasNoGenerics) flags = flags or ACC_STATIC or ACC_FINAL
+        codegen.v.newField(OtherOrigin(codegen.myClass.psiOrParent), flags,
+                           serialDescField, descType.descriptor, null, null)
+        // todo: lazy initialization of $$serialDesc that is performed only when save/load is invoked first time
+        if (!hasNoGenerics) return
+        val expr = codegen.createOrGetClInitCodegen()
+        with(expr.v) {
+            doGenerateSerialDescInitializer(expr, classDescVar = 0)
             putstatic(serializerAsmType.internalName, serialDescField, descType.descriptor)
         }
     }
@@ -138,13 +162,23 @@ class SerializerCodegenImpl(
     }
 
     private fun InstructionAdapter.serialCLassDescToLocalVar(classDescVar: Int) {
-        getstatic(serializerAsmType.internalName, serialDescField, descType.descriptor)
+        if (hasNoGenerics) {
+            getstatic(serializerAsmType.internalName, serialDescField, descType.descriptor)
+        } else {
+            load(0, serializerAsmType)
+            getfield(serializerAsmType.internalName, serialDescField, descType.descriptor)
+        }
         store(classDescVar, descType)
     }
 
     override fun generateSerializableClassProperty(property: PropertyDescriptor) {
         codegen.generateMethod(property.getter!!) { signature, expressionCodegen ->
-            getstatic(serializerAsmType.internalName, serialDescField, descType.descriptor)
+            if (hasNoGenerics) {
+                getstatic(serializerAsmType.internalName, serialDescField, descType.descriptor)
+            } else {
+                load(0, serializerAsmType)
+                getfield(serializerAsmType.internalName, serialDescField, descType.descriptor)
+            }
             areturn(descType)
         }
     }
