@@ -143,7 +143,16 @@ internal fun InstructionAdapter.stackValueSerializerInstanceFromClass(codegen: C
 
 internal fun InstructionAdapter.stackValueSerializerInstanceFromSerializer(codegen: ClassBodyCodegen, sti: JVMSerialTypeInfo): Boolean {
     val serializer = sti.serializer ?: return false
-    return stackValueSerializerInstance(codegen, sti.property.module, sti.property.type, serializer, this, sti.property.genericIndex) { idx ->
+    return stackValueSerializerInstanceFromSerializer(codegen, serializer, sti.property)
+}
+
+internal fun InstructionAdapter.stackValueSerializerInstanceFromSerializer(
+    codegen: ClassBodyCodegen,
+    serializer: ClassDescriptor?,
+    property: SerializableProperty
+): Boolean {
+    if (serializer == null) return false
+    return stackValueSerializerInstance(codegen, property.module, property.type, serializer, this, property.genericIndex) { idx ->
         load(0, kSerializerType)
         getfield(codegen.typeMapper.mapClass(codegen.descriptor).internalName, "$typeArgPrefix$idx", kSerializerType.descriptor)
     }
@@ -201,11 +210,7 @@ internal fun stackValueSerializerInstance(codegen: ClassBodyCodegen, module: Mod
         argSerializers.forEach { (argType, argSerializer) ->
             assert(stackValueSerializerInstance(codegen, module, argType, argSerializer, this, argType.genericIndex, genericSerializerFieldGetter))
             // wrap into nullable serializer if argType is nullable
-            if (argType.isMarkedNullable) {
-                invokestatic("kotlinx/serialization/internal/NullableSerializerKt", "makeNullable", // todo: extract?
-                             "(" + kSerializerType.descriptor + ")" + kSerializerType.descriptor, false)
-
-            }
+            wrapSerializerIfNullable(argType)
             signature.append(kSerializerType.descriptor)
         }
         signature.append(")V")
@@ -213,6 +218,14 @@ internal fun stackValueSerializerInstance(codegen: ClassBodyCodegen, module: Mod
         invokespecial(serializerType.internalName, "<init>", signature.toString(), false)
     }
     return true
+}
+
+fun InstructionAdapter.wrapSerializerIfNullable(serializableType: KotlinType) {
+    if (serializableType.isMarkedNullable) {
+        invokestatic("kotlinx/serialization/internal/NullableSerializerKt", "makeNullable", // todo: extract?
+                     "(" + kSerializerType.descriptor + ")" + kSerializerType.descriptor, false)
+
+    }
 }
 
 //
