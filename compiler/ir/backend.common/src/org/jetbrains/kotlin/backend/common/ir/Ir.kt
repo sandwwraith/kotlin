@@ -42,6 +42,12 @@ abstract class Symbols<out T : CommonBackendContext>(val context: T, private val
         return initializer()
     }
 
+    /**
+     * Use this table to reference external dependencies in backend.
+     */
+    open val externalSymbolTable: ReferenceSymbolTable
+        get() = throw IllegalStateException("${this::class} symbols does not support lazy stubs referencing")
+
     val refClass = calc { symbolTable.referenceClass(context.getInternalClass("Ref")) }
 
     //abstract val areEqualByValue: List<IrFunctionSymbol>

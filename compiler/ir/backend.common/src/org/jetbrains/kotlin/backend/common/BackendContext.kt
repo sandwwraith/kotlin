@@ -29,5 +29,4 @@ interface BackendContext {
     val irBuiltIns: IrBuiltIns
     val sharedVariablesManager: SharedVariablesManager
     val descriptorsFactory: DescriptorsFactory
-    val symbolTable: SymbolTable
 }

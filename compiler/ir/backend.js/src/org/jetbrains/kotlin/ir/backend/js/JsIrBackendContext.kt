@@ -31,7 +31,7 @@ import org.jetbrains.kotlin.types.KotlinType
 class JsIrBackendContext(
     val module: ModuleDescriptor,
     override val irBuiltIns: IrBuiltIns,
-    override val symbolTable: SymbolTable,
+    val symbolTable: SymbolTable,
     irModuleFragment: IrModuleFragment
 ) : CommonBackendContext {
 
